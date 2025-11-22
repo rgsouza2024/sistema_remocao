@@ -144,13 +144,15 @@ def encurtar_nome(texto):
         return texto[:28] + "..."
     return texto
 
-# --- MOTOR DE REMOÇÃO ---
+# --- MOTOR DE REMOÇÃO (ATUALIZADO PARA PERMITIR UPGRADE) ---
 
 def processar_remocao(df, vagas_iniciais_lista):
     # O conjunto de vagas abertas agora usa o texto padronizado (sem acentos, sem ª)
     vagas_abertas = set([padronizar_texto(v) for v in vagas_iniciais_lista])
     
+    # Dicionário guardará mais detalhes para permitir comparação de índice
     remocoes_confirmadas = {} 
+    
     log_movimentacoes = []
     ciclo = 0
     houve_movimentacao = True
@@ -158,56 +160,95 @@ def processar_remocao(df, vagas_iniciais_lista):
     while houve_movimentacao:
         houve_movimentacao = False
         ciclo += 1
+        
         for index, juiz in df.iterrows():
             matricula = juiz['Matrícula']
-            if matricula in remocoes_confirmadas: continue
-            
             nome = juiz['Nome']
             lotacao_atual = juiz['Lotação Atual']
             # Padroniza a lotação atual para quando ela virar vaga
             lotacao_atual_norm = padronizar_texto(lotacao_atual)
             opcoes = juiz['Lista_Opcoes']
             
+            # Verifica se o juiz já tem vaga e qual a prioridade dela (índice)
+            juiz_ja_tem_vaga = matricula in remocoes_confirmadas
+            indice_atual = 9999 # Se não tem vaga, aceita qualquer índice
+            
+            if juiz_ja_tem_vaga:
+                indice_atual = remocoes_confirmadas[matricula]['Opção Index']
+            
             match_encontrado = False
             vaga_escolhida = ""
-            opcao_numero = 0
+            novo_indice = 0
             opcao_final_texto = ""
             
             for i, opcao_bruta in enumerate(opcoes):
-                # Padroniza a opção do candidato (remove acentos, ª, etc)
+                # Se chegamos numa opção pior ou igual à que ele já tem, paramos de procurar
+                # (Só queremos UPGRADE, ou seja, índice MENOR)
+                if i >= indice_atual:
+                    break
+                
+                # Padroniza a opção do candidato
                 opcao_norm = padronizar_texto(opcao_bruta)
                 
                 for vaga_aberta in vagas_abertas:
                     # Comparação blindada: Texto limpo vs Texto limpo
-                    # Usamos 'in' para flexibilidade (ex: "22A VARA" in "22A VARA MG")
                     if vaga_aberta in opcao_norm or opcao_norm in vaga_aberta:
                         match_encontrado = True
                         vaga_escolhida = vaga_aberta
-                        opcao_numero = i + 1
+                        novo_indice = i
                         opcao_final_texto = opcao_norm
                         break
                 if match_encontrado: break
             
             if match_encontrado:
+                # --- MOVIMENTAÇÃO DETECTADA ---
+                
+                # Cenário 1: UPGRADE (Juiz troca vaga pior por melhor)
+                if juiz_ja_tem_vaga:
+                    vaga_anterior = remocoes_confirmadas[matricula]['Destino']
+                    # Devolve a vaga anterior para o pote
+                    vagas_abertas.add(vaga_anterior)
+                    log_movimentacoes.append(f"🔄 UPGRADE CICLO {ciclo}: {nome} trocou {vaga_anterior} por {opcao_final_texto} (Opção {novo_indice+1})")
+                
+                # Cenário 2: PRIMEIRA VEZ (Juiz sai da origem)
+                else:
+                    log_movimentacoes.append(f"✅ CICLO {ciclo}: {nome} assumiu {opcao_final_texto} (Opção {novo_indice+1})")
+                    # Abre a vaga de origem dele (só libera origem na primeira vez)
+                    if lotacao_atual_norm:
+                        vagas_abertas.add(lotacao_atual_norm)
+                        log_movimentacoes.append(f"   -> Abriu vaga: {lotacao_atual_norm}")
+
+                # Atualiza o registro do juiz com a nova vaga melhor
                 remocoes_confirmadas[matricula] = {
                     'Matrícula': matricula,
                     'Nome': nome,
                     'Origem': lotacao_atual,
-                    'Destino': opcao_final_texto,
-                    'Opção Nº': opcao_numero,
+                    'Destino': vaga_escolhida, # Nome padronizado para controle
+                    'DestinoTexto': opcao_final_texto, # Nome bonito para exibir
+                    'Opção Index': novo_indice,
+                    'Opção Nº': novo_indice + 1,
                     'Ciclo': ciclo
                 }
-                log_movimentacoes.append(f"✅ CICLO {ciclo}: {nome} assumiu {opcao_final_texto}")
+                
+                # Remove a nova vaga do pote
                 vagas_abertas.remove(vaga_escolhida)
                 
-                if lotacao_atual_norm:
-                    vagas_abertas.add(lotacao_atual_norm)
-                    log_movimentacoes.append(f"   -> Abriu vaga: {lotacao_atual_norm}")
-                
+                # Reinicia o loop para garantir direitos de antiguidade
                 houve_movimentacao = True
                 break 
     
-    return pd.DataFrame(list(remocoes_confirmadas.values())), log_movimentacoes, vagas_abertas
+    # Formata a saída para DataFrame compatível com o resto do código
+    lista_final = []
+    for m, dados in remocoes_confirmadas.items():
+        lista_final.append({
+            'Matrícula': dados['Matrícula'],
+            'Nome': dados['Nome'],
+            'Origem': dados['Origem'],
+            'Destino': dados['DestinoTexto'],
+            'Opção Nº': dados['Opção Nº']
+        })
+        
+    return pd.DataFrame(lista_final), log_movimentacoes, vagas_abertas
 
 # --- EXPORTAÇÃO E VISUALIZAÇÃO ---
 
@@ -290,15 +331,13 @@ if uploaded_file is not None:
                 vagas_iniciais = [v.strip() for v in texto_vagas_finais.split('\n') if v.strip()]
                 
                 # --- TRATAMENTO DE DATAS CRÍTICO ---
-                # Garante que datas vindas do Excel ou Word sejam tratadas iguais
                 df_bruto['Data de Exercício'] = pd.to_datetime(
                     df_bruto['Data de Exercício'], 
                     dayfirst=True, 
                     errors='coerce'
                 )
                 
-                # --- VERIFICAÇÃO DE SEGURANÇA (NOVO) ---
-                # Se todas as datas falharem (forem NaT) e o dataframe não estiver vazio, para tudo.
+                # --- VERIFICAÇÃO DE SEGURANÇA ---
                 if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
                     st.error("ERRO: Não foi possível ler as datas. Verifique se a coluna 'Data de Exercício' está no formato DD/MM/AAAA.")
                 else:
