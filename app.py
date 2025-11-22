@@ -297,46 +297,51 @@ if uploaded_file is not None:
                     errors='coerce'
                 )
                 
-                # Ordenação
-                df_ordenado = df_bruto.sort_values(by=['Data de Exercício', 'Matrícula'], ascending=[True, True])
-                
-                # Limpeza das Opções
-                opcoes_limpas = []
-                colunas_opcoes = [col for col in df_bruto.columns if 'Opção' in col]
-                for _, row in df_ordenado.iterrows():
-                    lista = [row[col] for col in colunas_opcoes if row[col] and str(row[col]).strip() not in ["", "nan"]]
-                    opcoes_limpas.append(lista)
-                df_ordenado['Lista_Opcoes'] = opcoes_limpas
-                
-                # Executa a Remoção
-                df_resultado, log, sobras = processar_remocao(df_ordenado, vagas_iniciais)
-                
-                if not df_resultado.empty:
-                    st.success("✅ Análise concluída!")
-                    
-                    tab1, tab2, tab3 = st.tabs(["📊 Resultado Visual", "📋 Tabela Oficial", "📜 Logs Detalhados"])
-                    
-                    with tab1:
-                        html_grafo = gerar_html_grafo(df_resultado)
-                        components.html(html_grafo, height=650, scrolling=True)
-                        st.download_button("📥 Baixar Grafo (HTML)", html_grafo, "Grafo_Remocao.html", "text/html")
-                    
-                    with tab2:
-                        st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
-                        
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            if sobras:
-                                st.write("### Vagas Remanescentes")
-                                st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
-                            else:
-                                st.info("Todas as vagas foram preenchidas.")
-                        with c2:
-                            st.write("### Exportação")
-                            excel_data = gerar_excel_em_memoria(df_resultado, sobras)
-                            st.download_button("📥 Baixar Planilha (.xlsx)", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    
-                    with tab3:
-                        st.text_area("Logs", value="\n".join(log), height=400)
+                # --- VERIFICAÇÃO DE SEGURANÇA (NOVO) ---
+                # Se todas as datas falharem (forem NaT) e o dataframe não estiver vazio, para tudo.
+                if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
+                    st.error("ERRO: Não foi possível ler as datas. Verifique se a coluna 'Data de Exercício' está no formato DD/MM/AAAA.")
                 else:
-                    st.warning("Nenhuma movimentação gerada. Verifique se as vagas iniciais correspondem às opções.")
+                    # Ordenação
+                    df_ordenado = df_bruto.sort_values(by=['Data de Exercício', 'Matrícula'], ascending=[True, True])
+                    
+                    # Limpeza das Opções
+                    opcoes_limpas = []
+                    colunas_opcoes = [col for col in df_bruto.columns if 'Opção' in col]
+                    for _, row in df_ordenado.iterrows():
+                        lista = [row[col] for col in colunas_opcoes if row[col] and str(row[col]).strip() not in ["", "nan"]]
+                        opcoes_limpas.append(lista)
+                    df_ordenado['Lista_Opcoes'] = opcoes_limpas
+                    
+                    # Executa a Remoção
+                    df_resultado, log, sobras = processar_remocao(df_ordenado, vagas_iniciais)
+                    
+                    if not df_resultado.empty:
+                        st.success("✅ Análise concluída!")
+                        
+                        tab1, tab2, tab3 = st.tabs(["📊 Resultado Visual", "📋 Tabela Oficial", "📜 Logs Detalhados"])
+                        
+                        with tab1:
+                            html_grafo = gerar_html_grafo(df_resultado)
+                            components.html(html_grafo, height=650, scrolling=True)
+                            st.download_button("📥 Baixar Grafo (HTML)", html_grafo, "Grafo_Remocao.html", "text/html")
+                        
+                        with tab2:
+                            st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
+                            
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if sobras:
+                                    st.write("### Vagas Remanescentes")
+                                    st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
+                                else:
+                                    st.info("Todas as vagas foram preenchidas.")
+                            with c2:
+                                st.write("### Exportação")
+                                excel_data = gerar_excel_em_memoria(df_resultado, sobras)
+                                st.download_button("📥 Baixar Planilha (.xlsx)", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        
+                        with tab3:
+                            st.text_area("Logs", value="\n".join(log), height=400)
+                    else:
+                        st.warning("Nenhuma movimentação gerada. Verifique se as vagas iniciais correspondem às opções.")
