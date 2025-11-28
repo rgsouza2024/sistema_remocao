@@ -1,3 +1,5 @@
+# Versão 11.0 - Análise de Remoção de Magistrados sem Lógica de "Congelamento"
+
 import streamlit as st
 import pandas as pd
 from docx import Document
