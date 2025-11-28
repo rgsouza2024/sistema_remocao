@@ -1,4 +1,4 @@
-# Versão 11.0 - Análise de Remoção de Magistrados sem Lógica de "Congelamento"
+# Versão 12.1 - Análise de Remoção de Magistrados com Lógica de "Congelamento"
 
 import streamlit as st
 import pandas as pd
@@ -8,7 +8,7 @@ from pyvis.network import Network
 from openpyxl.styles import Alignment
 import io
 import os
-import unicodedata # Biblioteca para remover acentos e caracteres especiais
+import unicodedata
 import streamlit.components.v1 as components
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
@@ -40,37 +40,23 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÃO DE HIGIENIZAÇÃO (O SEGREDO DA COMPATIBILIDADE) ---
+# --- FUNÇÃO DE HIGIENIZAÇÃO ---
 
 def padronizar_texto(texto):
     """
     Transforma qualquer texto em um padrão LIMPO para comparação perfeita.
-    Resolve o problema de 22ª vs 22A e traços diferentes.
     """
     if not isinstance(texto, str): return ""
     if not texto: return ""
     
-    # 1. Converter para string e Maiúsculo
     texto = str(texto).upper()
-    
-    # 2. Padronizar traços (Excel costuma usar travessão '–' em vez de hífen '-')
     texto = texto.replace('–', '-').replace('—', '-')
-    
-    # 3. Remover sufixos de status (ANTES de limpar acentos para garantir o split no traço certo)
     if " - " in texto:
         texto = texto.split(" - ")[0]
-    
-    # 4. Substituições manuais críticas para Magistratura
-    texto = texto.replace("ª", "A").replace("º", "O") # Resolve 22ª vs 22A
-    texto = texto.replace(" DA SJ ", " ").replace(" DA SSJ ", " ") # Remove conectivos
-    
-    # 5. Normalização Unicode (Remove acentos: Ú -> U, Ç -> C, Ã -> A)
-    # NFD separa o caractere base do acento, e filtramos apenas os não-acentos
+    texto = texto.replace("ª", "A").replace("º", "O")
+    texto = texto.replace(" DA SJ ", " ").replace(" DA SSJ ", " ")
     texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    
-    # 6. Remove espaços duplos e caracteres invisíveis (Non-breaking space \xa0)
     texto = " ".join(texto.split())
-    
     return texto
 
 # --- FUNÇÕES DE EXTRAÇÃO ---
@@ -95,14 +81,12 @@ def ler_arquivo_word(uploaded_file):
 
 def ler_arquivo_excel(uploaded_file):
     try:
-        # Lê o Excel. Não forçamos dtype=str globalmente para não quebrar datas,
-        # mas trataremos as strings depois.
+        # REVERTIDO PARA COMPATIBILIDADE COM V11: Deixa o Pandas detectar tipos (int/str)
+        # Isso garante que a ordenação de matrícula numérica seja igual à versão anterior
         df = pd.read_excel(uploaded_file)
         
-        # Limpeza de valores nulos
+        # Limpeza apenas em colunas de texto
         df = df.fillna('')
-        
-        # Converte colunas de texto para string e limpa espaços
         for col in df.select_dtypes(include=['object']).columns:
             df[col] = df[col].astype(str).str.strip()
             df[col] = df[col].replace(['nan', 'NaN', 'None'], '')
@@ -113,48 +97,31 @@ def ler_arquivo_excel(uploaded_file):
         return None
 
 def detectar_vagas_do_edital(df):
-    """Detecta vagas baseado na string 'DISPONÍVEL'."""
     vagas_detectadas = set()
     colunas_opcoes = [col for col in df.columns if 'Opção' in col]
-    
     for col in colunas_opcoes:
-        # Pega valores únicos como string
         valores = df[col].astype(str).unique()
         for val in valores:
             if "DISPONÍVEL" in val.upper():
-                # Usa a função padronizar_texto para extrair o nome limpo (Ex: 22A VARA MG)
-                # Isso garante que o que aparece na caixa de texto já é o nome "chave" para busca
                 nome_limpo = val.split(" - ")[0].strip() 
-                # Nota: Aqui mantemos o nome original (sem padronizar_texto total) para o usuário ler,
-                # mas a padronização total acontece dentro do processar_remocao
                 vagas_detectadas.add(nome_limpo)
-                
     return list(vagas_detectadas)
 
 def encurtar_nome(texto):
-    """Nome curto para visualização no gráfico."""
     if not texto: return "EXTERNO"
-    # Usa o texto já padronizado
     texto = padronizar_texto(texto)
-    
-    # Remoções estéticas
     texto = texto.replace("SUBSECAO JUDICIARIA DE ", "").replace("SECAO JUDICIARIA DE ", "")
     texto = texto.replace("SECAO JUDICIARIA DO ", "").replace("MINAS GERAIS", "MG")
     texto = texto.replace("VARA UNICA", "V.UNICA").replace("RELATORIA", "REL")
-    
     if len(texto) > 30:
         return texto[:28] + "..."
     return texto
 
-# --- MOTOR DE REMOÇÃO (ATUALIZADO PARA PERMITIR UPGRADE) ---
+# --- MOTOR DE REMOÇÃO (V11 COM UPGRADE) ---
 
 def processar_remocao(df, vagas_iniciais_lista):
-    # O conjunto de vagas abertas agora usa o texto padronizado (sem acentos, sem ª)
     vagas_abertas = set([padronizar_texto(v) for v in vagas_iniciais_lista])
-    
-    # Dicionário guardará mais detalhes para permitir comparação de índice
     remocoes_confirmadas = {} 
-    
     log_movimentacoes = []
     ciclo = 0
     houve_movimentacao = True
@@ -167,13 +134,11 @@ def processar_remocao(df, vagas_iniciais_lista):
             matricula = juiz['Matrícula']
             nome = juiz['Nome']
             lotacao_atual = juiz['Lotação Atual']
-            # Padroniza a lotação atual para quando ela virar vaga
             lotacao_atual_norm = padronizar_texto(lotacao_atual)
             opcoes = juiz['Lista_Opcoes']
             
-            # Verifica se o juiz já tem vaga e qual a prioridade dela (índice)
             juiz_ja_tem_vaga = matricula in remocoes_confirmadas
-            indice_atual = 9999 # Se não tem vaga, aceita qualquer índice
+            indice_atual = 9999
             
             if juiz_ja_tem_vaga:
                 indice_atual = remocoes_confirmadas[matricula]['Opção Index']
@@ -184,16 +149,10 @@ def processar_remocao(df, vagas_iniciais_lista):
             opcao_final_texto = ""
             
             for i, opcao_bruta in enumerate(opcoes):
-                # Se chegamos numa opção pior ou igual à que ele já tem, paramos de procurar
-                # (Só queremos UPGRADE, ou seja, índice MENOR)
-                if i >= indice_atual:
-                    break
+                if i >= indice_atual: break
                 
-                # Padroniza a opção do candidato
                 opcao_norm = padronizar_texto(opcao_bruta)
-                
                 for vaga_aberta in vagas_abertas:
-                    # Comparação blindada: Texto limpo vs Texto limpo
                     if vaga_aberta in opcao_norm or opcao_norm in vaga_aberta:
                         match_encontrado = True
                         vaga_escolhida = vaga_aberta
@@ -203,43 +162,30 @@ def processar_remocao(df, vagas_iniciais_lista):
                 if match_encontrado: break
             
             if match_encontrado:
-                # --- MOVIMENTAÇÃO DETECTADA ---
-                
-                # Cenário 1: UPGRADE (Juiz troca vaga pior por melhor)
                 if juiz_ja_tem_vaga:
                     vaga_anterior = remocoes_confirmadas[matricula]['Destino']
-                    # Devolve a vaga anterior para o pote
                     vagas_abertas.add(vaga_anterior)
                     log_movimentacoes.append(f"🔄 UPGRADE CICLO {ciclo}: {nome} trocou {vaga_anterior} por {opcao_final_texto} (Opção {novo_indice+1})")
-                
-                # Cenário 2: PRIMEIRA VEZ (Juiz sai da origem)
                 else:
                     log_movimentacoes.append(f"✅ CICLO {ciclo}: {nome} assumiu {opcao_final_texto} (Opção {novo_indice+1})")
-                    # Abre a vaga de origem dele (só libera origem na primeira vez)
                     if lotacao_atual_norm:
                         vagas_abertas.add(lotacao_atual_norm)
                         log_movimentacoes.append(f"   -> Abriu vaga: {lotacao_atual_norm}")
 
-                # Atualiza o registro do juiz com a nova vaga melhor
                 remocoes_confirmadas[matricula] = {
                     'Matrícula': matricula,
                     'Nome': nome,
                     'Origem': lotacao_atual,
-                    'Destino': vaga_escolhida, # Nome padronizado para controle
-                    'DestinoTexto': opcao_final_texto, # Nome bonito para exibir
+                    'Destino': vaga_escolhida,
+                    'DestinoTexto': opcao_final_texto,
                     'Opção Index': novo_indice,
                     'Opção Nº': novo_indice + 1,
                     'Ciclo': ciclo
                 }
-                
-                # Remove a nova vaga do pote
                 vagas_abertas.remove(vaga_escolhida)
-                
-                # Reinicia o loop para garantir direitos de antiguidade
                 houve_movimentacao = True
                 break 
     
-    # Formata a saída para DataFrame compatível com o resto do código
     lista_final = []
     for m, dados in remocoes_confirmadas.items():
         lista_final.append({
@@ -249,49 +195,36 @@ def processar_remocao(df, vagas_iniciais_lista):
             'Destino': dados['DestinoTexto'],
             'Opção Nº': dados['Opção Nº']
         })
-        
     return pd.DataFrame(lista_final), log_movimentacoes, vagas_abertas
 
-# --- EXPORTAÇÃO E VISUALIZAÇÃO ---
+# --- EXPORTAÇÃO ---
 
 def gerar_excel_em_memoria(df_resultado, sobras):
     output = io.BytesIO()
     df_sobras = pd.DataFrame(list(sobras), columns=["Vagas que Sobraram"])
-    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_resultado.to_excel(writer, index=False, sheet_name='Resultado')
         df_sobras.to_excel(writer, index=False, sheet_name='Resultado', startcol=8)
-        
         worksheet = writer.sheets['Resultado']
         estilo_esquerda = Alignment(horizontal='left')
         worksheet['I1'].alignment = estilo_esquerda
         for i in range(len(df_sobras)):
             worksheet[f'I{i+2}'].alignment = estilo_esquerda
-            
     return output.getvalue()
 
 def gerar_html_grafo(df_resultado):
     net = Network(height='600px', width='100%', bgcolor='#222222', font_color='white', directed=True)
     net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=200)
-
     for index, row in df_resultado.iterrows():
         partes_nome = row['Nome'].split(" ")
         juiz_curto = partes_nome[0] + " " + partes_nome[-1] 
         origem = encurtar_nome(row['Origem'])
         destino = encurtar_nome(row['Destino'])
         if not origem: origem = "EXTERNO"
-            
         net.add_node(origem, label=origem, color='#ff6b6b', title="Origem") 
         net.add_node(destino, label=destino, color='#51cf66', title="Destino")
-        
-        net.add_edge(
-            origem, destino, 
-            title=f"Magistrado: {row['Nome']}", 
-            label=juiz_curto, 
-            color='white',
-            font={'size': 9, 'align': 'middle', 'color': 'white', 'background': '#222222', 'strokeWidth': 0}
-        )
-    
+        net.add_edge(origem, destino, title=f"Magistrado: {row['Nome']}", label=juiz_curto, color='white',
+            font={'size': 9, 'align': 'middle', 'color': 'white', 'background': '#222222', 'strokeWidth': 0})
     caminho_temp = "grafo_temp.html"
     net.save_graph(caminho_temp)
     with open(caminho_temp, 'r', encoding='utf-8') as f:
@@ -314,39 +247,72 @@ if uploaded_file is not None:
         df_bruto = ler_arquivo_excel(uploaded_file)
     
     if df_bruto is not None:
-        # Autodetecção de Vagas
         vagas_detectadas = detectar_vagas_do_edital(df_bruto)
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
         st.info(f"🔎 O sistema detectou {len(vagas_detectadas)} vagas ofertadas no edital.")
         
-        with st.expander("Ver ou Editar Vagas Iniciais Detectadas", expanded=True):
-            texto_vagas_finais = st.text_area(
-                "Vagas consideradas (uma por linha):",
-                value=texto_padrao,
-                height=100
-            )
+        # --- ÁREA DE CONFIGURAÇÃO (AGORA COM CONGELAMENTO) ---
+        with st.expander("Configurações do Edital e Regras", expanded=True):
+            col_vagas, col_regras = st.columns([0.6, 0.4])
+            
+            with col_vagas:
+                texto_vagas_finais = st.text_area(
+                    "Vagas do Edital (uma por linha):", 
+                    value=texto_padrao, 
+                    height=150
+                )
+            
+            with col_regras:
+                st.write("### Regra de Congelamento")
+                st.info("Magistrados removidos há menos de 1 ano vão para o final da lista.")
+                ativar_congelamento = st.checkbox("Existem inscritos 'congelados'?", value=False)
+                
+                magistrados_selecionados = []
+                if ativar_congelamento:
+                    # Cria opção "Nome (Matrícula)" para facilitar busca
+                    df_bruto['Display_Option'] = df_bruto['Nome'] + " (" + df_bruto['Matrícula'].astype(str) + ")"
+                    opcoes_magistrados = df_bruto['Display_Option'].tolist()
+                    
+                    magistrados_selecionados = st.multiselect(
+                        "Selecione os magistrados congelados:",
+                        options=opcoes_magistrados,
+                        placeholder="Digite o nome ou matrícula..."
+                    )
         
         if st.button("🚀 Iniciar Processamento da Remoção", type="primary"):
             with st.spinner('Processando...'):
-                
                 vagas_iniciais = [v.strip() for v in texto_vagas_finais.split('\n') if v.strip()]
                 
-                # --- TRATAMENTO DE DATAS CRÍTICO ---
-                df_bruto['Data de Exercício'] = pd.to_datetime(
-                    df_bruto['Data de Exercício'], 
-                    dayfirst=True, 
-                    errors='coerce'
-                )
+                # Tratamento de Datas
+                df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
                 
-                # --- VERIFICAÇÃO DE SEGURANÇA ---
                 if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
-                    st.error("ERRO: Não foi possível ler as datas. Verifique se a coluna 'Data de Exercício' está no formato DD/MM/AAAA.")
+                    st.error("ERRO: Datas inválidas.")
                 else:
-                    # Ordenação
-                    df_ordenado = df_bruto.sort_values(by=['Data de Exercício', 'Matrícula'], ascending=[True, True])
+                    # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO ---
+                    df_bruto['Status_Congelado'] = 0
                     
-                    # Limpeza das Opções
+                    if ativar_congelamento and magistrados_selecionados:
+                        # Extrai matrícula da string da seleção
+                        matriculas_congeladas = [sel.split('(')[-1].replace(')', '') for sel in magistrados_selecionados]
+                        # Converte para string para garantir match com o dataframe (se matrícula for numérico no Excel)
+                        df_bruto['Matrícula_Str'] = df_bruto['Matrícula'].astype(str)
+                        mask = df_bruto['Matrícula_Str'].isin(matriculas_congeladas)
+                        df_bruto.loc[mask, 'Status_Congelado'] = 1
+                    
+                    # --- ORDENAÇÃO DINÂMICA ---
+                    # Se não houver congelamento ativado, usa a ordenação CLÁSSICA (V11) para garantir compatibilidade
+                    criterios_ordenacao = ['Data de Exercício', 'Matrícula']
+                    ascendencia = [True, True]
+                    
+                    if ativar_congelamento:
+                        criterios_ordenacao.insert(0, 'Status_Congelado')
+                        ascendencia.insert(0, True)
+                    
+                    df_ordenado = df_bruto.sort_values(by=criterios_ordenacao, ascending=ascendencia)
+                    
+                    # Limpeza Opções
                     opcoes_limpas = []
                     colunas_opcoes = [col for col in df_bruto.columns if 'Opção' in col]
                     for _, row in df_ordenado.iterrows():
@@ -354,35 +320,32 @@ if uploaded_file is not None:
                         opcoes_limpas.append(lista)
                     df_ordenado['Lista_Opcoes'] = opcoes_limpas
                     
-                    # Executa a Remoção
+                    # Executa
                     df_resultado, log, sobras = processar_remocao(df_ordenado, vagas_iniciais)
                     
                     if not df_resultado.empty:
                         st.success("✅ Análise concluída!")
-                        
-                        tab1, tab2, tab3 = st.tabs(["📊 Resultado Visual", "📋 Tabela Oficial", "📜 Logs Detalhados"])
+                        tab1, tab2, tab3 = st.tabs(["📊 Resultado Visual", "📋 Tabela Oficial", "📜 Logs"])
                         
                         with tab1:
                             html_grafo = gerar_html_grafo(df_resultado)
                             components.html(html_grafo, height=650, scrolling=True)
-                            st.download_button("📥 Baixar Grafo (HTML)", html_grafo, "Grafo_Remocao.html", "text/html")
-                        
+                            st.download_button("📥 Grafo (HTML)", html_grafo, "Grafo.html", "text/html")
                         with tab2:
-                            st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
+                            if ativar_congelamento and magistrados_selecionados:
+                                st.warning(f"⚠️ Atenção: {len(magistrados_selecionados)} magistrado(s) processado(s) no final da lista.")
                             
+                            st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
                             c1, c2 = st.columns(2)
                             with c1:
                                 if sobras:
                                     st.write("### Vagas Remanescentes")
                                     st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
-                                else:
-                                    st.info("Todas as vagas foram preenchidas.")
+                                else: st.info("Sem vagas.")
                             with c2:
-                                st.write("### Exportação")
                                 excel_data = gerar_excel_em_memoria(df_resultado, sobras)
-                                st.download_button("📥 Baixar Planilha (.xlsx)", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                        
+                                st.download_button("📥 Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                         with tab3:
                             st.text_area("Logs", value="\n".join(log), height=400)
                     else:
-                        st.warning("Nenhuma movimentação gerada. Verifique se as vagas iniciais correspondem às opções.")
+                        st.warning("Nenhuma movimentação gerada.")
