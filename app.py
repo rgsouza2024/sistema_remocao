@@ -422,13 +422,9 @@ if uploaded_file is not None:
                     
                     if not df_resultado.empty:
                         st.success("✅ Análise concluída!")
-                        tab1, tab2, tab3 = st.tabs(["📊 Resultado Visual", "📋 Tabela Oficial", "📜 Logs"])
+                        tab1, tab2, tab3 = st.tabs(["📋 Quadro de Remoções", "📊 Resultado Visual", "📜 Logs"])
                         
                         with tab1:
-                            html_grafo = gerar_html_grafo(df_resultado)
-                            components.html(html_grafo, height=650, scrolling=True)
-                            st.download_button("📥 Grafo (HTML)", html_grafo, "Grafo.html", "text/html")
-                        with tab2:
                             if ativar_congelamento and magistrados_selecionados:
                                 st.warning(f"⚠️ Atenção: {len(magistrados_selecionados)} magistrado(s) processado(s) no final da lista.")
                             
@@ -442,6 +438,10 @@ if uploaded_file is not None:
                             with c2:
                                 excel_data = gerar_excel_em_memoria(df_resultado, sobras)
                                 st.download_button("📥 Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        with tab2:
+                            html_grafo = gerar_html_grafo(df_resultado)
+                            components.html(html_grafo, height=650, scrolling=True)
+                            st.download_button("📥 Grafo (HTML)", html_grafo, "Grafo.html", "text/html")
                         with tab3:
                             st.text_area("Logs", value="\n".join(log), height=400)
                     else:
