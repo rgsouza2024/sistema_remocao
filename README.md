@@ -160,12 +160,18 @@ Normaliza strings para comparação uniforme, tratando:
 
 ## 💡 Principais Funcionalidades
 
+### Motor de Remoção
 * **🔍 Lookahead Anti-Bloqueio (V13):** Evita que o candidato mais antigo "dê um tiro no próprio pé" ao pegar uma vaga que bloquearia sua opção preferencial.
 * **❄️ Regra de Congelamento:** Interface para seleção manual de magistrados penalizados por remoção recente.
 * **🔄 Lógica de Upgrade:** Garantia de que o magistrado sempre obtenha a melhor vaga possível.
-* **📂 Suporte Híbrido:** Leitura de arquivos **Word (.docx)** e **Excel (.xlsx)**.
 * **🛡️ Smart Match:** Comparação precisa de nomes de varas usando regex word boundaries.
-* **📊 Visualização de Grafos:** Mapa visual interativo das movimentações com PyVis.
+
+### Interface e Usabilidade
+* **🏛️ Identidade Institucional:** Logo do TRF1 no cabeçalho com cores institucionais (#002F6C).
+* **📋 Abas Reorganizadas:** "Quadro de Remoções" como aba padrão, facilitando acesso ao resultado principal.
+* **✅ Validação de Colunas:** Verificação prévia de colunas obrigatórias com mensagens de erro amigáveis.
+* **📂 Suporte Híbrido:** Leitura de arquivos **Word (.docx)** e **Excel (.xlsx)**.
+* **📊 Visualização de Grafos:** Mapa visual interativo das movimentações com PyVis (física otimizada).
 * **📑 Relatórios Oficiais:** Planilha `.xlsx` formatada com resultado final e vagas remanescentes.
 
 ---
@@ -177,7 +183,7 @@ Normaliza strings para comparação uniforme, tratando:
 3. Confira as vagas iniciais detectadas automaticamente.
 4. **(Opcional)** Marque **"Existem inscritos congelados?"** e selecione os nomes.
 5. Clique em **"Iniciar Processamento"**.
-6. Navegue pelas abas: **Grafo Visual**, **Tabela de Resultados**, **Logs**.
+6. Navegue pelas abas: **Quadro de Remoções**, **Resultado Visual**, **Logs**.
 
 ---
 
@@ -201,6 +207,7 @@ Normaliza strings para comparação uniforme, tratando:
 sistema_remocao/
 ├── app.py              # Aplicação principal Streamlit (Motor V13)
 ├── analise_remocao.py  # Script standalone (versão CLI)
+├── logo_trf1.png       # Logo institucional do TRF1
 ├── requirements.txt    # Dependências Python
 ├── README.md           # Esta documentação
 └── lib/                # Bibliotecas auxiliares (vis.js, tom-select)
@@ -225,6 +232,14 @@ streamlit run app.py
 ---
 
 ## 📝 Changelog
+
+### V13.1 (2026-01-16) - Melhorias de UI/UX
+- 🎨 **Identidade Institucional:** Adicionado logo do TRF1 no cabeçalho
+- 🎨 **Cor Institucional:** Título em azul oficial (#002F6C)
+- 📋 **Abas Reorganizadas:** "Quadro de Remoções" como aba principal (antes era "Resultado Visual")
+- ⚙️ **Expander Colapsado:** Configurações do Edital iniciam recolhidas por padrão
+- ✅ **Validação de Colunas:** Erro amigável quando colunas obrigatórias estão faltando
+- 📊 **Grafo Otimizado:** Ajustes na física (spring_length=300) para melhor visualização
 
 ### V13 (2026-01-16)
 - ✨ **Lookahead Anti-Bloqueio:** Novo algoritmo que detecta deadlocks e permite que o sênior ceda a vez estrategicamente

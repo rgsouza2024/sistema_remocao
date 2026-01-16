@@ -329,9 +329,14 @@ def gerar_html_grafo(df_resultado):
     os.remove(caminho_temp)
     return html_string
 
-# --- INTERFACE PRINCIPAL ---
+# --- CABEÇALHO COM LOGO ---
+col_logo, col_titulo = st.columns([1, 3])
+with col_logo:
+    st.image("logo_trf1.png", width=200)
+with col_titulo:
+    st.write("")  # Espaço para alinhar com o logo
+    st.markdown('<h1 style="color: #002F6C;">Sistema de Análise de Remoção de Magistrados</h1>', unsafe_allow_html=True)
 
-st.title("⚖️ Sistema de Análise de Remoção de Magistrados")
 st.markdown("Faça upload do arquivo de inscritos (**Word .docx** ou **Excel .xlsx**).")
 
 uploaded_file = st.file_uploader("Arraste o arquivo aqui", type=["docx", "xlsx"])
@@ -380,6 +385,17 @@ if uploaded_file is not None:
         if st.button("🚀 Iniciar Processamento da Remoção", type="primary"):
             with st.spinner('Processando...'):
                 vagas_iniciais = [v.strip() for v in texto_vagas_finais.split('\n') if v.strip()]
+                
+                # --- VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS ---
+                colunas_obrigatorias = ['Nome', 'Matrícula', 'Lotação Atual', 'Data de Exercício']
+                colunas_faltando = [col for col in colunas_obrigatorias if col not in df_bruto.columns]
+                
+                if colunas_faltando:
+                    st.error(f"❌ **Erro no arquivo:** As seguintes colunas obrigatórias não foram encontradas:")
+                    for col in colunas_faltando:
+                        st.markdown(f"- `{col}`")
+                    st.info("📋 **Colunas encontradas no arquivo:** " + ", ".join(df_bruto.columns.tolist()))
+                    st.stop()
                 
                 # Tratamento de Datas
                 df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
