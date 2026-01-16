@@ -311,7 +311,7 @@ def gerar_excel_em_memoria(df_resultado, sobras):
 
 def gerar_html_grafo(df_resultado):
     net = Network(height='600px', width='100%', bgcolor='#222222', font_color='white', directed=True)
-    net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=200)
+    net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=300)
     for index, row in df_resultado.iterrows():
         partes_nome = row['Nome'].split(" ")
         juiz_curto = partes_nome[0] + " " + partes_nome[-1] 
