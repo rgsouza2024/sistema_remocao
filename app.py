@@ -9,6 +9,7 @@ from openpyxl.styles import Alignment
 import io
 import os
 import unicodedata
+import re
 import streamlit.components.v1 as components
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
@@ -58,6 +59,15 @@ def padronizar_texto(texto):
     texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     texto = " ".join(texto.split())
     return texto
+
+def smart_match(vaga, opcao):
+    """
+    Verifica se a vaga está contida na opção usando word boundaries.
+    Evita que '7A VARA' seja encontrada dentro de '27A VARA'.
+    """
+    # Escapa caracteres especiais de regex e adiciona word boundaries
+    pattern = r'\b' + re.escape(vaga) + r'\b'
+    return bool(re.search(pattern, opcao))
 
 # --- FUNÇÕES DE EXTRAÇÃO ---
 
@@ -117,61 +127,148 @@ def encurtar_nome(texto):
         return texto[:28] + "..."
     return texto
 
-# --- MOTOR DE REMOÇÃO (V11 COM UPGRADE) ---
+# --- MOTOR DE REMOÇÃO (V13 - ANTIGUIDADE + LOOKAHEAD ANTI-BLOQUEIO) ---
 
 def processar_remocao(df, vagas_iniciais_lista):
+    """
+    Motor de remoção com Antiguidade Soberana + Lookahead Anti-Bloqueio.
+    
+    Regras:
+    1. Processa candidatos em ordem de antiguidade (Data + Matrícula)
+    2. Antes de alocar, verifica se pegar essa vaga bloquearia a 1ª opção do sênior
+    3. Se houver bloqueio, cede a vez para o júnior que ocupa a vaga desejada
+    """
     vagas_abertas = set([padronizar_texto(v) for v in vagas_iniciais_lista])
-    remocoes_confirmadas = {} 
+    remocoes_confirmadas = {}
+    candidatos_cederam_vez = set()  # Matrículas que cederam vez neste ciclo
     log_movimentacoes = []
     ciclo = 0
     houve_movimentacao = True
     
+    # Criar mapa de lotação -> matrícula para lookup rápido
+    def get_ocupante_lotacao(lotacao_norm):
+        """Retorna a matrícula de quem ocupa determinada lotação."""
+        for _, juiz in df.iterrows():
+            if padronizar_texto(juiz['Lotação Atual']) == lotacao_norm:
+                mat = juiz['Matrícula']
+                # Se já foi removido, não ocupa mais
+                if mat not in remocoes_confirmadas:
+                    return mat
+        return None
+    
+    def get_primeira_opcao_disponivel(juiz, vagas_set):
+        """Retorna o índice e texto da primeira opção disponível para o juiz."""
+        opcoes = juiz['Lista_Opcoes']
+        for i, opcao_bruta in enumerate(opcoes):
+            opcao_norm = padronizar_texto(opcao_bruta)
+            for vaga in vagas_set:
+                if smart_match(vaga, opcao_norm):
+                    return i, vaga, opcao_norm
+        return None, None, None
+    
+    def detectar_bloqueio(senior, vaga_pretendida, indice_pretendido):
+        """
+        Verifica se o sênior pegando esta vaga bloquearia sua própria 1ª opção.
+        
+        Retorna True se:
+        1. O sênior tem uma opção MELHOR que esta (índice menor)
+        2. Essa opção melhor é ocupada por um júnior
+        3. Esse júnior quer a vaga_pretendida
+        """
+        opcoes = senior['Lista_Opcoes']
+        
+        # Se já é a 1ª opção disponível, não há bloqueio
+        if indice_pretendido == 0:
+            return False
+        
+        # Verificar opções melhores (índices menores)
+        for i in range(indice_pretendido):
+            if i >= len(opcoes):
+                break
+            opcao_melhor_norm = padronizar_texto(opcoes[i])
+            
+            # Quem ocupa esta opção melhor?
+            ocupante_mat = get_ocupante_lotacao(opcao_melhor_norm)
+            
+            if ocupante_mat is None:
+                continue  # Ninguém ocupa, não é bloqueio
+            
+            # O ocupante quer a vaga_pretendida?
+            for _, juiz in df.iterrows():
+                if juiz['Matrícula'] == ocupante_mat:
+                    opcoes_ocupante = juiz['Lista_Opcoes']
+                    for j, op_bruta in enumerate(opcoes_ocupante):
+                        op_norm = padronizar_texto(op_bruta)
+                        if smart_match(vaga_pretendida, op_norm):
+                            # BLOQUEIO DETECTADO!
+                            # O ocupante da opção melhor do sênior quer esta vaga
+                            return True
+                    break
+        
+        return False
+    
     while houve_movimentacao:
         houve_movimentacao = False
         ciclo += 1
+        candidatos_cederam_vez.clear()
         
-        for index, juiz in df.iterrows():
+        for _, juiz in df.iterrows():
             matricula = juiz['Matrícula']
             nome = juiz['Nome']
             lotacao_atual = juiz['Lotação Atual']
             lotacao_atual_norm = padronizar_texto(lotacao_atual)
             opcoes = juiz['Lista_Opcoes']
             
-            juiz_ja_tem_vaga = matricula in remocoes_confirmadas
-            indice_atual = 9999
+            # Pular se já cedeu vez neste ciclo
+            if matricula in candidatos_cederam_vez:
+                continue
             
-            if juiz_ja_tem_vaga:
+            # Determinar índice atual se já tem vaga
+            if matricula in remocoes_confirmadas:
                 indice_atual = remocoes_confirmadas[matricula]['Opção Index']
+            else:
+                indice_atual = 9999
             
+            # Buscar primeira opção disponível
             match_encontrado = False
             vaga_escolhida = ""
             novo_indice = 0
             opcao_final_texto = ""
             
             for i, opcao_bruta in enumerate(opcoes):
-                if i >= indice_atual: break
+                if i >= indice_atual:
+                    break  # Só considera opções melhores que a atual
                 
                 opcao_norm = padronizar_texto(opcao_bruta)
                 for vaga_aberta in vagas_abertas:
-                    if vaga_aberta in opcao_norm or opcao_norm in vaga_aberta:
-                        match_encontrado = True
-                        vaga_escolhida = vaga_aberta
-                        novo_indice = i
-                        opcao_final_texto = opcao_norm
+                    if smart_match(vaga_aberta, opcao_norm):
+                        # LOOKAHEAD: Verificar se há bloqueio
+                        if detectar_bloqueio(juiz, vaga_aberta, i):
+                            # Ceder vez - não pegar esta vaga agora
+                            candidatos_cederam_vez.add(matricula)
+                            log_movimentacoes.append(f"⏸️ CICLO {ciclo}: {nome} cedeu vez para destravar opção melhor")
+                        else:
+                            match_encontrado = True
+                            vaga_escolhida = vaga_aberta
+                            novo_indice = i
+                            opcao_final_texto = opcao_norm
                         break
-                if match_encontrado: break
+                if match_encontrado or matricula in candidatos_cederam_vez:
+                    break
             
             if match_encontrado:
+                juiz_ja_tem_vaga = matricula in remocoes_confirmadas
+                
                 if juiz_ja_tem_vaga:
                     vaga_anterior = remocoes_confirmadas[matricula]['Destino']
                     vagas_abertas.add(vaga_anterior)
-                    log_movimentacoes.append(f"🔄 UPGRADE CICLO {ciclo}: {nome} trocou {vaga_anterior} por {opcao_final_texto} (Opção {novo_indice+1})")
+                    log_movimentacoes.append(f"🔄 UPGRADE CICLO {ciclo}: {nome} trocou para {opcao_final_texto} (Opção {novo_indice+1})")
                 else:
                     log_movimentacoes.append(f"✅ CICLO {ciclo}: {nome} assumiu {opcao_final_texto} (Opção {novo_indice+1})")
                     if lotacao_atual_norm:
                         vagas_abertas.add(lotacao_atual_norm)
                         log_movimentacoes.append(f"   -> Abriu vaga: {lotacao_atual_norm}")
-
+                
                 remocoes_confirmadas[matricula] = {
                     'Matrícula': matricula,
                     'Nome': nome,
@@ -184,7 +281,7 @@ def processar_remocao(df, vagas_iniciais_lista):
                 }
                 vagas_abertas.remove(vaga_escolhida)
                 houve_movimentacao = True
-                break 
+                break  # Restart
     
     lista_final = []
     for m, dados in remocoes_confirmadas.items():
