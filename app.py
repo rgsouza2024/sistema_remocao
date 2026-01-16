@@ -347,15 +347,15 @@ if uploaded_file is not None:
         vagas_detectadas = detectar_vagas_do_edital(df_bruto)
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
-        st.info(f"🔎 O sistema detectou {len(vagas_detectadas)} vagas ofertadas no edital.")
+        st.info(f"🔎 O sistema detectou {len(vagas_detectadas)} vagas sendo disputadas.")
         
         # --- ÁREA DE CONFIGURAÇÃO (AGORA COM CONGELAMENTO) ---
-        with st.expander("Configurações do Edital e Regras", expanded=True):
+        with st.expander("Configurações do Edital e Regras", expanded=False):
             col_vagas, col_regras = st.columns([0.6, 0.4])
             
             with col_vagas:
                 texto_vagas_finais = st.text_area(
-                    "Vagas do Edital (uma por linha):", 
+                    "Vagas disponíveis (uma por linha):", 
                     value=texto_padrao, 
                     height=150
                 )
