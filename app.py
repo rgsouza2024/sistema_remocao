@@ -1,4 +1,4 @@
-# Versão 12.0 - Análise de Remoção de Magistrados com Lógica de "Congelamento"
+# app.py Versão 13.1 - Análise de Remoção de Magistrados com Lógica de "Congelamento"
 
 import streamlit as st
 import pandas as pd
