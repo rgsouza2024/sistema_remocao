@@ -10,6 +10,7 @@ import io
 import os
 import unicodedata
 import re
+import json
 import streamlit.components.v1 as components
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
@@ -106,6 +107,23 @@ def ler_arquivo_excel(uploaded_file):
         st.error(f"Erro ao ler arquivo Excel: {e}")
         return None
 
+def ler_arquivo_json(uploaded_file):
+    try:
+        dados = json.load(uploaded_file)
+        # Se for lista de dicionários, o Pandas engole direto
+        if isinstance(dados, list):
+            return pd.DataFrame(dados)
+        # Se estiver encapsulado
+        elif isinstance(dados, dict):
+            for chk in dados.values():
+                if isinstance(chk, list):
+                    return pd.DataFrame(chk)
+            return pd.DataFrame([dados])
+        return None
+    except Exception as e:
+        st.error(f"Erro ao ler JSON: {e}")
+        return None
+
 def detectar_vagas_do_edital(df):
     vagas_detectadas = set()
     colunas_opcoes = [col for col in df.columns if 'Opção' in col]
@@ -140,12 +158,12 @@ def normalizar_colunas(df):
     # Mapa: Nome Final (Interno) -> [Lista de Variantes Possíveis]
     # Obs: As variantes serão comparadas sem acento também.
     mapa_desejado = {
-        'Nome': ['nome', 'candidato', 'magistrado'],
+        'Nome': ['nome', 'candidato', 'magistrado', 'nome_completo'],
         'Matrícula': ['matrícula', 'matricula'],
-        'Lotação Atual': ['lotação atual', 'lotacao atual', 'unidade atual'],
-        'Data de Exercício': ['data de exercício', 'data de exercicio', 'exercício'],
-        'início da lotação': ['início da lotação', 'inicio da lotacao', 'data de início', 'início na unidade'],
-        'motivo da lotação': ['motivo da lotação', 'motivo da lotacao', 'motivo']
+        'Lotação Atual': ['lotação atual', 'lotacao atual', 'unidade atual', 'lotacao_atual', 'lotacao'],
+        'Data de Exercício': ['data de exercício', 'data de exercicio', 'exercício', 'data_exercicio'],
+        'início da lotação': ['início da lotação', 'inicio da lotacao', 'data de início', 'início na unidade', 'inicio_lota', 'iniciolota'],
+        'motivo da lotação': ['motivo da lotação', 'motivo da lotacao', 'motivo', 'motivo_lota', 'motivolota']
     }
     
     # 1. Cria mapa "Slug -> Coluna Real do Excel"
@@ -394,9 +412,9 @@ with col_titulo:
     st.write("")  # Espaço para alinhar com o logo
     st.markdown('<h1 style="color: #002F6C;">Sistema de Análise de Remoção de Magistrados</h1>', unsafe_allow_html=True)
 
-st.markdown("Faça upload do arquivo de inscritos (**Word .docx** ou **Excel .xlsx**).")
+st.markdown("Faça upload do arquivo de inscritos (**Word .docx**, **Excel .xlsx** ou **JSON .json**).")
 
-uploaded_file = st.file_uploader("Arraste o arquivo aqui", type=["docx", "xlsx"])
+uploaded_file = st.file_uploader("Arraste o arquivo aqui", type=["docx", "xlsx", "json"])
 
 if uploaded_file is not None:
     df_bruto = None
@@ -404,6 +422,8 @@ if uploaded_file is not None:
         df_bruto = ler_arquivo_word(uploaded_file)
     elif uploaded_file.name.endswith('.xlsx'):
         df_bruto = ler_arquivo_excel(uploaded_file)
+    elif uploaded_file.name.endswith('.json'):
+        df_bruto = ler_arquivo_json(uploaded_file)
     
     if df_bruto is not None:
         df_bruto = normalizar_colunas(df_bruto)
