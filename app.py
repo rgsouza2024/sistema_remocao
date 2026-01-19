@@ -127,6 +127,63 @@ def encurtar_nome(texto):
         return texto[:28] + "..."
     return texto
 
+def remove_acentos(texto):
+    if not isinstance(texto, str): return str(texto)
+    return ''.join(c for c in unicodedata.normalize('NFD', texto) 
+                  if unicodedata.category(c) != 'Mn').lower()
+
+def normalizar_colunas(df):
+    """
+    Padroniza os nomes das colunas, ignorando case e acentos.
+    Ex: 'Início da Lotação' -> 'início da lotação'
+    """
+    # Mapa: Nome Final (Interno) -> [Lista de Variantes Possíveis]
+    # Obs: As variantes serão comparadas sem acento também.
+    mapa_desejado = {
+        'Nome': ['nome', 'candidato', 'magistrado'],
+        'Matrícula': ['matrícula', 'matricula'],
+        'Lotação Atual': ['lotação atual', 'lotacao atual', 'unidade atual'],
+        'Data de Exercício': ['data de exercício', 'data de exercicio', 'exercício'],
+        'início da lotação': ['início da lotação', 'inicio da lotacao', 'data de início', 'início na unidade'],
+        'motivo da lotação': ['motivo da lotação', 'motivo da lotacao', 'motivo']
+    }
+    
+    # 1. Cria mapa "Slug -> Coluna Real do Excel"
+    colunas_excel_slugs = {}
+    for col in df.columns:
+        slug = remove_acentos(col)
+        colunas_excel_slugs[slug] = col
+        
+    novo_mapa_rename = {}
+    
+    for alvo_interno, variantes in mapa_desejado.items():
+        # Se a coluna alvo já existe EXATAMENTE, pula
+        if alvo_interno in df.columns:
+            continue
+            
+        encontrou = False
+        
+        # Tenta casar o alvo_interno (slugified) com as colunas do excel
+        slug_alvo = remove_acentos(alvo_interno)
+        if slug_alvo in colunas_excel_slugs:
+            coluna_real = colunas_excel_slugs[slug_alvo]
+            novo_mapa_rename[coluna_real] = alvo_interno
+            encontrou = True
+            
+        # Tenta casar variantes
+        if not encontrou:
+            for var in variantes:
+                slug_var = remove_acentos(var)
+                if slug_var in colunas_excel_slugs:
+                    coluna_real = colunas_excel_slugs[slug_var]
+                    novo_mapa_rename[coluna_real] = alvo_interno
+                    break
+    
+    if novo_mapa_rename:
+        df.rename(columns=novo_mapa_rename, inplace=True)
+        
+    return df
+
 # --- MOTOR DE REMOÇÃO (V13 - ANTIGUIDADE + LOOKAHEAD ANTI-BLOQUEIO) ---
 
 def processar_remocao(df, vagas_iniciais_lista):
@@ -349,12 +406,13 @@ if uploaded_file is not None:
         df_bruto = ler_arquivo_excel(uploaded_file)
     
     if df_bruto is not None:
+        df_bruto = normalizar_colunas(df_bruto)
         vagas_detectadas = detectar_vagas_do_edital(df_bruto)
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
         st.info(f"🔎 O sistema detectou {len(vagas_detectadas)} vagas sendo disputadas.")
         
-        # --- ÁREA DE CONFIGURAÇÃO (AGORA COM CONGELAMENTO) ---
+        # --- ÁREA DE CONFIGURAÇÃO (AUTOMAÇÃO DO CONGELAMENTO) ---
         with st.expander("Configurações do Edital e Regras", expanded=False):
             col_vagas, col_regras = st.columns([0.6, 0.4])
             
@@ -367,20 +425,12 @@ if uploaded_file is not None:
             
             with col_regras:
                 st.write("### Regra de Congelamento")
-                st.info("Magistrados removidos há menos de 1 ano vão para o final da lista.")
-                ativar_congelamento = st.checkbox("Existem inscritos 'congelados'?", value=False)
-                
-                magistrados_selecionados = []
-                if ativar_congelamento:
-                    # Cria opção "Nome (Matrícula)" para facilitar busca
-                    df_bruto['Display_Option'] = df_bruto['Nome'] + " (" + df_bruto['Matrícula'].astype(str) + ")"
-                    opcoes_magistrados = df_bruto['Display_Option'].tolist()
-                    
-                    magistrados_selecionados = st.multiselect(
-                        "Selecione os magistrados congelados:",
-                        options=opcoes_magistrados,
-                        placeholder="Digite o nome ou matrícula..."
-                    )
+                st.info("Apenas o motivo 'Remoção' gera congelamento de 1 ano. Demais motivos são neutros.")
+                data_referencia = st.date_input(
+                    "Data de Referência (Data da Nova Remoção):",
+                    help="Data utilizada para calcular o interstício de 1 ano. Se não informada, considera hoje."
+                )
+                st.caption("ℹ️ Magistrados com dados incompletos ou motivos neutros não serão congelados.")
         
         if st.button("🚀 Iniciar Processamento da Remoção", type="primary"):
             with st.spinner('Processando...'):
@@ -388,7 +438,10 @@ if uploaded_file is not None:
                 
                 # --- VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS ---
                 colunas_obrigatorias = ['Nome', 'Matrícula', 'Lotação Atual', 'Data de Exercício']
+                colunas_automacao = ['início da lotação', 'motivo da lotação']
+                
                 colunas_faltando = [col for col in colunas_obrigatorias if col not in df_bruto.columns]
+                colunas_automacao_faltando = [col for col in colunas_automacao if col not in df_bruto.columns]
                 
                 if colunas_faltando:
                     st.error(f"❌ **Erro no arquivo:** As seguintes colunas obrigatórias não foram encontradas:")
@@ -397,31 +450,43 @@ if uploaded_file is not None:
                     st.info("📋 **Colunas encontradas no arquivo:** " + ", ".join(df_bruto.columns.tolist()))
                     st.stop()
                 
+                if colunas_automacao_faltando:
+                    st.warning(f"⚠️ **Automação Limitada:** Colunas `{', '.join(colunas_automacao_faltando)}` não encontradas. O congelamento automático será desativado para todos.")
+                
                 # Tratamento de Datas
                 df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
                 
                 if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
                     st.error("ERRO: Datas inválidas.")
                 else:
-                    # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO ---
+                    # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO AUTOMÁTICO ---
                     df_bruto['Status_Congelado'] = 0
+                    magistrados_congelados_nomes = []
+                    magistrados_dados_incompletos = []
                     
-                    if ativar_congelamento and magistrados_selecionados:
-                        # Extrai matrícula da string da seleção
-                        matriculas_congeladas = [sel.split('(')[-1].replace(')', '') for sel in magistrados_selecionados]
-                        # Converte para string para garantir match com o dataframe (se matrícula for numérico no Excel)
-                        df_bruto['Matrícula_Str'] = df_bruto['Matrícula'].astype(str)
-                        mask = df_bruto['Matrícula_Str'].isin(matriculas_congeladas)
-                        df_bruto.loc[mask, 'Status_Congelado'] = 1
+                    ref_date = pd.to_datetime(data_referencia)
                     
+                    for idx, row in df_bruto.iterrows():
+                        motivo = str(row.get('motivo da lotação', '')).strip().upper()
+                        data_inicio = pd.to_datetime(row.get('início da lotação', None), dayfirst=True, errors='coerce')
+                        
+                        # In Dubio Pro Candidato: Dados faltantes ou inválidos -> Descongelado
+                        if pd.isna(data_inicio) or not motivo or motivo == 'NAN':
+                            if 'início da lotação' in df_bruto.columns or 'motivo da lotação' in df_bruto.columns:
+                                magistrados_dados_incompletos.append(row['Nome'])
+                            continue
+                        
+                        # Regra: Apenas 'REMOÇÃO' congela. Demais motivos são neutros.
+                        if motivo == 'REMOÇÃO':
+                            diferenca_dias = (ref_date - data_inicio).days
+                            if diferenca_dias < 365:
+                                df_bruto.at[idx, 'Status_Congelado'] = 1
+                                magistrados_congelados_nomes.append(f"{row['Nome']} ({diferenca_dias} dias)")
+
                     # --- ORDENAÇÃO DINÂMICA ---
-                    # Se não houver congelamento ativado, usa a ordenação CLÁSSICA (V11) para garantir compatibilidade
-                    criterios_ordenacao = ['Data de Exercício', 'Matrícula']
-                    ascendencia = [True, True]
-                    
-                    if ativar_congelamento:
-                        criterios_ordenacao.insert(0, 'Status_Congelado')
-                        ascendencia.insert(0, True)
+                    # Status_Congelado (0 primeiro, 1 depois) + Antiguidade
+                    criterios_ordenacao = ['Status_Congelado', 'Data de Exercício', 'Matrícula']
+                    ascendencia = [True, True, True]
                     
                     df_ordenado = df_bruto.sort_values(by=criterios_ordenacao, ascending=ascendencia)
                     
@@ -441,8 +506,16 @@ if uploaded_file is not None:
                         tab1, tab2, tab3 = st.tabs(["📋 Quadro de Remoções", "📊 Resultado Visual", "📜 Logs"])
                         
                         with tab1:
-                            if ativar_congelamento and magistrados_selecionados:
-                                st.warning(f"⚠️ Atenção: {len(magistrados_selecionados)} magistrado(s) processado(s) no final da lista.")
+                            if magistrados_congelados_nomes:
+                                with st.warning("❄️ Magistrados Congelados Automáticos (1 ano):"):
+                                    for m in magistrados_congelados_nomes:
+                                        st.markdown(f"- {m}")
+                            
+                            if magistrados_dados_incompletos:
+                                with st.expander("⚠️ Alerta de Integridade: Dados Incompletos", expanded=False):
+                                    st.write("Os seguintes magistrados possuem dados faltantes em 'início da lotação' ou 'motivo da lotação' e foram considerados **descongelados** por padrão:")
+                                    for m in magistrados_dados_incompletos:
+                                        st.markdown(f"- {m}")
                             
                             st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
                             c1, c2 = st.columns(2)
