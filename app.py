@@ -197,6 +197,19 @@ def normalizar_colunas(df):
                     novo_mapa_rename[coluna_real] = alvo_interno
                     break
     
+    # 2. Normalização de Colunas de Opção (ex: "1ª OPÇÃO" -> "1ª Opção")
+    # O sistema espera que a coluna contenha 'Opção' (com acento e Title Case)
+    for col in df.columns:
+        if col in novo_mapa_rename: continue
+        
+        slug = remove_acentos(col) # '1a opcao', '1 opcao',etc
+        # Regex: Começa com dígitos, seguido de qualquer coisa, e tem 'opcao'
+        match = re.search(r'^(\d+).*opcao', slug)
+        if match:
+            numero = match.group(1)
+            novo_nome_padrao = f"{numero}ª Opção"
+            novo_mapa_rename[col] = novo_nome_padrao
+    
     if novo_mapa_rename:
         df.rename(columns=novo_mapa_rename, inplace=True)
         
