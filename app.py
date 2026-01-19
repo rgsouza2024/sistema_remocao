@@ -467,17 +467,18 @@ if uploaded_file is not None:
                     ref_date = pd.to_datetime(data_referencia)
                     
                     for idx, row in df_bruto.iterrows():
-                        motivo = str(row.get('motivo da lotação', '')).strip().upper()
+                        motivo = str(row.get('motivo da lotação', ''))
+                        motivo_norm = remove_acentos(motivo)
                         data_inicio = pd.to_datetime(row.get('início da lotação', None), dayfirst=True, errors='coerce')
                         
                         # In Dubio Pro Candidato: Dados faltantes ou inválidos -> Descongelado
-                        if pd.isna(data_inicio) or not motivo or motivo == 'NAN':
+                        if pd.isna(data_inicio) or not motivo_norm or motivo_norm == 'nan':
                             if 'início da lotação' in df_bruto.columns or 'motivo da lotação' in df_bruto.columns:
                                 magistrados_dados_incompletos.append(row['Nome'])
                             continue
                         
-                        # Regra: Apenas 'REMOÇÃO' congela. Demais motivos são neutros.
-                        if motivo == 'REMOÇÃO':
+                        # Regra: Se contiver 'remocao' (com ou sem acento), congela.
+                        if 'remocao' in motivo_norm:
                             diferenca_dias = (ref_date - data_inicio).days
                             if diferenca_dias < 365:
                                 df_bruto.at[idx, 'Status_Congelado'] = 1
