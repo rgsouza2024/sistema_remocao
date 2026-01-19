@@ -170,7 +170,10 @@ Normaliza strings para comparação uniforme, tratando:
 * **🏛️ Identidade Institucional:** Logo do TRF1 no cabeçalho com cores institucionais (#002F6C).
 * **📋 Abas Reorganizadas:** "Quadro de Remoções" como aba padrão, facilitando acesso ao resultado principal.
 * **✅ Validação de Colunas:** Verificação prévia de colunas obrigatórias com mensagens de erro amigáveis.
-* **📂 Suporte Híbrido:** Leitura de arquivos **Word (.docx)** e **Excel (.xlsx)**.
+* **✅ Validação de Colunas:** Verificação prévia de colunas obrigatórias com mensagens de erro amigáveis.
+* **📂 Suporte Multi-Formato:** Leitura de arquivos **Word (.docx)**, **Excel (.xlsx)** e **JSON (.json)**.
+* **🔤 Normalização Robusta:** Reconhecimento inteligente de colunas independente de acentos ou maiúsculas (ex: "Início da Lotação" = "inicio da lotacao").
+* **❄️ Congelamento Inteligente:** Detecção automática baseada na palavra-chave "remoção" (substring case-insensitive).
 * **📊 Visualização de Grafos:** Mapa visual interativo das movimentações com PyVis (física otimizada).
 * **📑 Relatórios Oficiais:** Planilha `.xlsx` formatada com resultado final e vagas remanescentes.
 
@@ -232,6 +235,12 @@ streamlit run app.py
 ---
 
 ## 📝 Changelog
+
+### V13.2 (2026-01-19) - Robustez e Novos Formatos
+- ✨ **Suporte a JSON:** Agora aceita arquivos `.json` (lista de objetos) além de Excel e Word.
+- ✨ **Normalização de Colunas:** O sistema agora é "Case & Accent Insensitive". Aceita "Início da Lotação", "inicio da lotacao", "INICIO_LOTA", etc.
+- ✨ **Congelamento Automático:** Regra de congelamento baseada na palavra-chave "remocao" (substring). Detecta "Remoção a Pedido", "REMOÇÃO", etc.
+- ✨ **Detecção de Opções:** Normalização automática de colunas de opções (ex: "1ª OPÇÃO" -> "1ª Opção").
 
 ### V13.1 (2026-01-16) - Melhorias de UI/UX
 - 🎨 **Identidade Institucional:** Adicionado logo do TRF1 no cabeçalho
