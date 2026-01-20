@@ -461,6 +461,7 @@ if uploaded_file is not None:
                 st.info("Apenas o motivo 'Remoção' gera congelamento de 1 ano. Demais motivos são neutros.")
                 data_referencia = st.date_input(
                     "Data de Referência (Data da Nova Remoção):",
+                    format="DD/MM/YYYY",
                     help="Data utilizada para calcular o interstício de 1 ano. Se não informada, considera hoje."
                 )
                 st.caption("ℹ️ Magistrados com dados incompletos ou motivos neutros não serão congelados.")
