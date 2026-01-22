@@ -120,7 +120,7 @@ if uploaded_file is not None:
                 # Tratamento de Datas
                 df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
                 
-                    if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
+                if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
                     st.error("ERRO: Datas inválidas.")
                 else:
                     # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO AUTOMÁTICO (VIA MOTOR) ---
