@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+httpx
+pytest
+pandas
+python-docx
+openpyxl
+networkx
+pyvis
