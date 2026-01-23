@@ -1,4 +1,4 @@
-# motor_remocao.py
+# motor_remocao.py - versão 15.0
 # Módulo Core - Contém toda a lógica de negócio e processamento de dados.
 # Desacoplado de interface gráfica (Streamlit).
 

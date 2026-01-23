@@ -1,4 +1,4 @@
-# app.py Versão 14.1 - Refatorado com motor_remocao
+# app.py Versão 15.0 - Refatorado com motor_remocao
 
 import streamlit as st
 import pandas as pd
