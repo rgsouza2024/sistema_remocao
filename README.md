@@ -234,7 +234,44 @@ streamlit run app.py
 
 ---
 
+## 🔌 Integração via API (V15.0)
+
+O sistema agora conta com uma **API RESTful de alta performance** baseada em FastAPI e totalmente "dockerizada", pronta para ser integrada aos sistemas oficiais do Tribunal.
+
+### Executando com Docker
+
+Não é necessário instalar Python ou dependências. Basta ter o Docker instalado.
+
+1. **Construir a imagem:**
+   ```bash
+   docker build -t api-remocao .
+   ```
+
+2. **Rodar o container:**
+   ```bash
+   docker run -d -p 8000:8000 api-remocao
+   ```
+
+3. **Acessar Documentação Interativa (Swagger):**
+   Acesse **[http://localhost:8000/docs](http://localhost:8000/docs)** no seu navegador.
+   Lá você pode testar o endpoint de upload diretamente.
+
+### Endpoints Principais
+
+*   **`POST /analisar-remocao`**:
+    *   **Input:** Arquivo `.json`, `.xlsx` ou `.docx`.
+    *   **Parâmetros Opcionais:** `data_referencia` (para congelamento), `vagas_edital` (lista manual).
+    *   **Output:** JSON contendo a lista de remoções processada, lista de congelados e vagas remanescentes.
+
+---
+
 ## 📝 Changelog
+
+### V15.0 (2026-01-22) - API & Docker
+- 🚀 **Nova API REST:** Interface FastAPI criada em `api.py`.
+- 🐳 **Docker:** Adicionado `Dockerfile` para deployment simplificado.
+- 🏗️ **Refatoração Core:** Lógica de negócio isolada em `motor_remocao.py`, desacoplada do Streamlit.
+- 🧪 **Testes:** Scripts de validação da API e do motor.
 
 ### V13.2 (2026-01-19) - Robustez e Novos Formatos
 - ✨ **Suporte a JSON:** Agora aceita arquivos `.json` (lista de objetos) além de Excel e Word.
