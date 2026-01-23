@@ -1,4 +1,4 @@
-# analise_remocao.py - Versão 14.0 - Análise de Remoção de Magistrados com Lógica de "Congelamento"
+# analise_remocao.py - Versão 15.0 - Análise de Remoção de Magistrados com Lógica de "Congelamento"
 
 import pandas as pd
 from docx import Document

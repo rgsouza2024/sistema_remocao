@@ -1,4 +1,4 @@
-# api.py
+# api.py - Versão 15.0
 # Interface API via FastAPI
 # Expondo o motor de remoção para integração com outros sistemas
 
