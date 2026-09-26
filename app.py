@@ -66,6 +66,16 @@ st.markdown("""
     [data-testid="stMainBlockContainer"] {
         padding-top: var(--space-8);
         padding-bottom: var(--space-12);
+        max-width: 90rem;
+        margin-inline: auto;
+    }
+    .st-key-configuracao {
+        width: 100%;
+        max-width: 60rem;
+        margin-inline: auto;
+    }
+    .st-key-configuracao [data-testid="stElementContainer"] {
+        width: 100%;
     }
     [data-testid="stMainBlockContainer"] h1,
     [data-testid="stMainBlockContainer"] h2,
@@ -129,15 +139,21 @@ st.markdown("""
     [data-testid="stDecoration"] { display: none; }
     .cabecalho {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         align-items: center;
-        gap: var(--space-4) var(--space-6);
-        margin: var(--space-4) 0 var(--space-6);
+        gap: var(--space-3);
+        text-align: center;
+        margin: var(--space-4) 0 var(--space-8);
     }
-    .cabecalho img { width: 248px; height: auto; }
+    .cabecalho img { width: 248px; height: auto; margin-bottom: var(--space-2); }
     [data-testid="stMainBlockContainer"] .cabecalho h1 {
         margin: 0;
         padding: 0;
+    }
+    .cabecalho-intro {
+        margin: 0;
+        font-size: var(--type-body);
+        line-height: var(--leading-body);
     }
     .cabecalho [data-testid="stHeaderActionElements"] { display: none; }
     .cadeia { margin-bottom: var(--space-6); }
@@ -236,13 +252,15 @@ with open("logo_trf1.png", "rb") as arquivo_logo:
 st.markdown(
     f'<header class="cabecalho"><img src="data:image/png;base64,{logo_base64}" '
     'alt="Justiça Federal – Tribunal Regional Federal da 1ª Região">'
-    '<h1>Sistema de Análise de Remoção de Magistrados</h1></header>',
+    '<h1>Sistema de Análise de Remoção de Magistrados</h1>'
+    '<p class="cabecalho-intro">Envie a relação de inscritos em formato <strong>Word (.docx)</strong>, '
+    '<strong>Excel (.xlsx)</strong> ou <strong>JSON (.json)</strong>.</p></header>',
     unsafe_allow_html=True
 )
 
-st.markdown("Envie a relação de inscritos em formato **Word (.docx)**, **Excel (.xlsx)** ou **JSON (.json)**.")
-
-uploaded_file = st.file_uploader(
+# Etapa de configuração em coluna estreita e centralizada; resultados usam a largura total
+area_configuracao = st.container(key="configuracao")
+uploaded_file = area_configuracao.file_uploader(
     "Arquivo de inscritos",
     type=["docx", "xlsx", "json"],
     help="Selecione ou arraste um arquivo nos formatos indicados."
@@ -263,10 +281,10 @@ if uploaded_file is not None:
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
         qtd_vagas = len(vagas_detectadas)
-        st.info(f"O sistema detectou {qtd_vagas} {'vaga disputada' if qtd_vagas == 1 else 'vagas disputadas'}.")
-        
+        area_configuracao.info(f"O sistema detectou {qtd_vagas} {'vaga disputada' if qtd_vagas == 1 else 'vagas disputadas'}.")
+
         # --- ÁREA DE CONFIGURAÇÃO (AUTOMAÇÃO DO CONGELAMENTO) ---
-        with st.expander("Configurações do edital e regras", expanded=False):
+        with area_configuracao.expander("Configurações do edital e regras", expanded=False):
             col_vagas, col_regras = st.columns([0.6, 0.4])
             
             with col_vagas:
@@ -286,7 +304,7 @@ if uploaded_file is not None:
                 )
                 st.caption("Magistrados com dados incompletos ou motivos neutros não serão congelados.")
         
-        processar = st.button("Iniciar processamento da remoção", type="primary")
+        processar = area_configuracao.button("Iniciar processamento da remoção", type="primary")
         aviso_resultado = st.empty()
         area_resultado = st.empty()
 
