@@ -20,7 +20,7 @@ Aplicação para simular a distribuição de vagas em concursos de remoção de 
 - **Código-fonte:** [repositório no GitHub](https://github.com/rgsouza2024/sistema_remocao), branch `main`
 - **Interface publicada:** Streamlit, com `app.py` como arquivo de entrada do Space.
 
-Em 26/09/2026, o Space ainda publicava o commit `33cd0c6`. As alterações posteriores da branch `main` do GitHub (cadeias de remoção e ajustes de interface) não estavam publicadas. O Space não se sincroniza automaticamente com o GitHub: cada atualização precisa ser enviada ao Space.
+O Space é atualizado manualmente a partir da branch `main` do GitHub; não há sincronização automática entre os dois. A última atualização foi feita em 26/09/2026.
 
 ## Funcionalidades
 
