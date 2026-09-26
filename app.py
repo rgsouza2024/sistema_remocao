@@ -21,43 +21,93 @@ from motor_remocao import (
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
     page_title="Análise de Remoção",
-    page_icon="⚖️",
+    page_icon="logo_trf1.png",
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CSS (BOTÃO AZUL) ---
+# --- AJUSTES VISUAIS ---
 st.markdown("""
     <style>
-    div.stButton > button[kind="primary"] {
-        background-color: #007BFF;
-        color: white;
-        border: none;
+    :root {
+        --type-title: clamp(1.75rem, 2.5vw, 2.25rem);
+        --type-section: 1.5rem;
+        --type-subsection: 1.25rem;
+        --type-body: 1rem;
+        --type-label: 0.875rem;
+        --type-caption: 0.8125rem;
+        --leading-heading: 1.25;
+        --leading-body: 1.5;
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-12: 3rem;
     }
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #0056b3;
-        color: white;
-        border: none;
+    [data-testid="stMainBlockContainer"] {
+        padding-top: var(--space-8);
+        padding-bottom: var(--space-12);
     }
-    div.stButton > button[kind="primary"]:focus {
-        background-color: #0056b3;
-        color: white;
-        border: none;
-        box-shadow: none;
+    [data-testid="stMainBlockContainer"] h1,
+    [data-testid="stMainBlockContainer"] h2,
+    [data-testid="stMainBlockContainer"] h3 {
+        font-weight: 600;
+        line-height: var(--leading-heading);
+        letter-spacing: -0.01em;
+    }
+    [data-testid="stMainBlockContainer"] h1 {
+        font-size: var(--type-title);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin: 0 0 var(--space-4);
+    }
+    [data-testid="stMainBlockContainer"] h2 {
+        font-size: var(--type-section);
+        margin: var(--space-8) 0 var(--space-3);
+    }
+    [data-testid="stMainBlockContainer"] h3 {
+        font-size: var(--type-subsection);
+        margin: var(--space-6) 0 var(--space-2);
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stMarkdownContainer"] > p {
+        font-size: var(--type-body);
+        line-height: var(--leading-body);
+        margin-bottom: var(--space-4);
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] p {
+        font-size: var(--type-label);
+        font-weight: 600;
+        line-height: var(--leading-heading);
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stCaptionContainer"] {
+        font-size: var(--type-caption);
+        line-height: var(--leading-body);
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stAlert"] {
+        font-size: var(--type-body);
+        line-height: var(--leading-body);
+    }
+    div[data-testid="stImage"] {
+        margin-top: var(--space-4);
     }
     </style>
 """, unsafe_allow_html=True)
 
 # --- CABEÇALHO COM LOGO ---
-col_logo, col_titulo = st.columns([1, 3])
+col_logo, col_titulo = st.columns([1, 4])
 with col_logo:
-    st.image("logo_trf1.png", width=200)
+    st.image("logo_trf1.png", width=320)
 with col_titulo:
-    st.write("")  # Espaço para alinhar com o logo
-    st.markdown('<h1 style="color: #002F6C;">Sistema de Análise de Remoção de Magistrados</h1>', unsafe_allow_html=True)
+    st.title("Sistema de Análise de Remoção de Magistrados")
 
-st.markdown("Faça upload do arquivo de inscritos (**Word .docx**, **Excel .xlsx** ou **JSON .json**).")
+st.markdown("Envie a relação de inscritos em formato **Word (.docx)**, **Excel (.xlsx)** ou **JSON (.json)**.")
 
-uploaded_file = st.file_uploader("Arraste o arquivo aqui", type=["docx", "xlsx", "json"])
+uploaded_file = st.file_uploader(
+    "Arquivo de inscritos",
+    type=["docx", "xlsx", "json"],
+    help="Selecione ou arraste um arquivo nos formatos indicados."
+)
 
 if uploaded_file is not None:
     df_bruto = None
@@ -73,7 +123,7 @@ if uploaded_file is not None:
         vagas_detectadas = detectar_vagas_do_edital(df_bruto)
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
-        st.info(f"🔎 O sistema detectou {len(vagas_detectadas)} vagas sendo disputadas.")
+        st.info(f"O sistema detectou {len(vagas_detectadas)} vagas sendo disputadas.")
         
         # --- ÁREA DE CONFIGURAÇÃO (AUTOMAÇÃO DO CONGELAMENTO) ---
         with st.expander("Configurações do Edital e Regras", expanded=False):
@@ -94,9 +144,12 @@ if uploaded_file is not None:
                     format="DD/MM/YYYY",
                     help="Data utilizada para calcular o interstício de 1 ano. Se não informada, considera hoje."
                 )
-                st.caption("ℹ️ Magistrados com dados incompletos ou motivos neutros não serão congelados.")
+                st.caption("Magistrados com dados incompletos ou motivos neutros não serão congelados.")
         
-        if st.button("🚀 Iniciar Processamento da Remoção", type="primary"):
+        aviso_resultado = st.empty()
+        area_resultado = st.empty()
+
+        if st.button("Iniciar processamento da remoção", type="primary"):
             with st.spinner('Processando...'):
                 vagas_iniciais = [v.strip() for v in texto_vagas_finais.split('\n') if v.strip()]
                 
@@ -108,20 +161,23 @@ if uploaded_file is not None:
                 colunas_automacao_faltando = [col for col in colunas_automacao if col not in df_bruto.columns]
                 
                 if colunas_faltando:
-                    st.error(f"❌ **Erro no arquivo:** As seguintes colunas obrigatórias não foram encontradas:")
-                    for col in colunas_faltando:
-                        st.markdown(f"- `{col}`")
-                    st.info("📋 **Colunas encontradas no arquivo:** " + ", ".join(df_bruto.columns.tolist()))
+                    with area_resultado.container():
+                        st.error("**Erro no arquivo:** As seguintes colunas obrigatórias não foram encontradas:")
+                        for col in colunas_faltando:
+                            st.markdown(f"- `{col}`")
+                        st.info("**Colunas encontradas no arquivo:** " + ", ".join(df_bruto.columns.tolist()))
                     st.stop()
                 
                 if colunas_automacao_faltando:
-                    st.warning(f"⚠️ **Automação Limitada:** Colunas `{', '.join(colunas_automacao_faltando)}` não encontradas. O congelamento automático será desativado para todos.")
+                    with aviso_resultado.container():
+                        st.warning(f"**Automação limitada:** Colunas `{', '.join(colunas_automacao_faltando)}` não encontradas. O congelamento automático será desativado para todos.")
                 
                 # Tratamento de Datas
                 df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
                 
                 if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
-                    st.error("ERRO: Datas inválidas.")
+                    with area_resultado.container():
+                        st.error("ERRO: Datas inválidas.")
                 else:
                     # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO AUTOMÁTICO (VIA MOTOR) ---
                     df_bruto, magistrados_congelados_nomes, magistrados_dados_incompletos = aplicar_congelamento(df_bruto, data_referencia)
@@ -145,36 +201,44 @@ if uploaded_file is not None:
                     df_resultado, log, sobras = processar_remocao(df_ordenado, vagas_iniciais)
                     
                     if not df_resultado.empty:
-                        st.success("✅ Análise concluída!")
-                        tab1, tab2, tab3 = st.tabs(["📋 Quadro de Remoções", "📊 Resultado Visual", "📜 Logs"])
-                        
-                        with tab1:
-                            if magistrados_congelados_nomes:
-                                with st.warning("❄️ Magistrados Congelados Automáticos (1 ano):"):
-                                    for m in magistrados_congelados_nomes:
-                                        st.markdown(f"- {m}")
-                            
-                            if magistrados_dados_incompletos:
-                                with st.expander("⚠️ Alerta de Integridade: Dados Incompletos", expanded=False):
-                                    st.write("Os seguintes magistrados possuem dados faltantes em 'início da lotação' ou 'motivo da lotação' e foram considerados **descongelados** por padrão:")
-                                    for m in magistrados_dados_incompletos:
-                                        st.markdown(f"- {m}")
-                            
-                            st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if sobras:
-                                    st.write("### Vagas Remanescentes")
-                                    st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
-                                else: st.info("Sem vagas.")
-                            with c2:
-                                excel_data = gerar_excel_em_memoria(df_resultado, sobras)
-                                st.download_button("📥 Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                        with tab2:
-                            html_grafo = gerar_html_grafo(df_resultado)
-                            components.html(html_grafo, height=650, scrolling=True)
-                            st.download_button("📥 Grafo (HTML)", html_grafo, "Grafo.html", "text/html")
-                        with tab3:
-                            st.text_area("Logs", value="\n".join(log), height=400)
+                        with area_resultado.container():
+                            st.success("Análise concluída!")
+                            tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Resultado visual", "Logs"])
+
+                            with tab1:
+                                if magistrados_congelados_nomes:
+                                    with st.warning("Magistrados congelados automaticamente (1 ano):"):
+                                        for m in magistrados_congelados_nomes:
+                                            st.markdown(f"- {m}")
+
+                                if magistrados_dados_incompletos:
+                                    with st.expander("Alerta de integridade: dados incompletos", expanded=False):
+                                        st.write("Os seguintes magistrados possuem dados faltantes em 'início da lotação' ou 'motivo da lotação' e foram considerados **descongelados** por padrão:")
+                                        for m in magistrados_dados_incompletos:
+                                            st.markdown(f"- {m}")
+
+                                st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
+                                c1, c2 = st.columns(2)
+                                with c1:
+                                    if sobras:
+                                        st.write("### Vagas Remanescentes")
+                                        st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
+                                    else: st.info("Sem vagas.")
+                                with c2:
+                                    excel_data = gerar_excel_em_memoria(df_resultado, sobras)
+                                    st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                            with tab2:
+                                html_grafo = gerar_html_grafo(df_resultado)
+                                _, coluna_grafo, _ = st.columns([1, 1.5, 1])
+                                with coluna_grafo:
+                                    components.html(html_grafo, height=620, scrolling=False)
+                                    st.download_button("Baixar grafo (HTML)", html_grafo, "Grafo.html", "text/html")
+                            with tab3:
+                                logs_apresentacao = "\n".join(
+                                    linha.removeprefix("\u23f8\ufe0f ").removeprefix("\U0001f504 ").removeprefix("\u2705 ")
+                                    for linha in log
+                                )
+                                st.text_area("Logs", value=logs_apresentacao, height=400)
                     else:
-                        st.warning("Nenhuma movimentação gerada.")
+                        with area_resultado.container():
+                            st.warning("Nenhuma movimentação gerada.")

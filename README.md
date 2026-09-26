@@ -58,18 +58,20 @@ O motor procura a primeira opção disponível, verifica possíveis bloqueios e 
 
 Requisitos: Python 3.12 e acesso à internet para instalar as dependências.
 
+A versão do Streamlit está fixada em `1.40.1` no `requirements.txt`, igual à versão declarada em `sdk_version` no cabeçalho deste README. Isso alinha as configurações do projeto; a versão efetivamente instalada no Space depende do commit implantado e deve ser conferida nos logs de build.
+
 No PowerShell:
 
 ```powershell
 git clone https://github.com/rgsouza2024/sistema_remocao.git
 cd sistema_remocao
 py -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-streamlit run app.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m streamlit --version
+.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-O Streamlit informa no terminal o endereço local da aplicação.
+O comando de versão deve informar `Streamlit, version 1.40.1`. O Streamlit informa no terminal o endereço local da aplicação. Use o Python do `.venv` para iniciar a interface com as dependências fixadas pelo projeto.
 
 ## API REST
 

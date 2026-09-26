@@ -8,7 +8,6 @@ import networkx as nx
 from pyvis.network import Network
 from openpyxl.styles import Alignment
 import io
-import os
 import unicodedata
 import re
 import json
@@ -401,8 +400,9 @@ def gerar_excel_em_memoria(df_resultado, sobras):
     return output.getvalue()
 
 def gerar_html_grafo(df_resultado):
-    net = Network(height='600px', width='100%', bgcolor='#222222', font_color='white', directed=True)
-    net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=300)
+    net = Network(height='600px', width='100%', bgcolor='white', font_color='black', directed=True, cdn_resources='in_line')
+    net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=600, overlap=1)
+    net.options.physics.stabilization.fit = False
     for index, row in df_resultado.iterrows():
         partes_nome = row['Nome'].split(" ")
         juiz_curto = partes_nome[0] + " " + partes_nome[-1] 
@@ -411,11 +411,33 @@ def gerar_html_grafo(df_resultado):
         if not origem: origem = "EXTERNO"
         net.add_node(origem, label=origem, color='#ff6b6b', title="Origem") 
         net.add_node(destino, label=destino, color='#51cf66', title="Destino")
-        net.add_edge(origem, destino, title=f"Magistrado: {row['Nome']}", label=juiz_curto, color='white',
-            font={'size': 9, 'align': 'middle', 'color': 'white', 'background': '#222222', 'strokeWidth': 0})
-    caminho_temp = "grafo_temp.html"
-    net.save_graph(caminho_temp)
-    with open(caminho_temp, 'r', encoding='utf-8') as f:
-        html_string = f.read()
-    os.remove(caminho_temp)
-    return html_string
+        net.add_edge(origem, destino, title=f"Magistrado: {row['Nome']}", label=juiz_curto, color='black',
+            font={'size': 8, 'align': 'top', 'color': 'black', 'background': 'white', 'strokeWidth': 0})
+    html = net.generate_html()
+    inicializar_zoom = '''var enquadramentoDefinido = false;
+    var temporizadorEnquadramento = null;
+    function ajustarEnquadramento() {
+        var dimensoes = container.getBoundingClientRect();
+        if (enquadramentoDefinido || !network.getNodeIds().length || !dimensoes.width || !dimensoes.height) {
+            return;
+        }
+        clearTimeout(temporizadorEnquadramento);
+        temporizadorEnquadramento = setTimeout(function() {
+            var dimensoesAtuais = container.getBoundingClientRect();
+            if (!dimensoesAtuais.width || !dimensoesAtuais.height) {
+                return;
+            }
+            enquadramentoDefinido = true;
+            observadorGrafo.disconnect();
+            window.removeEventListener("resize", ajustarEnquadramento);
+            network.fit({animation: false});
+        }, 500);
+    }
+    var observadorGrafo = new ResizeObserver(ajustarEnquadramento);
+    observadorGrafo.observe(container);
+    window.addEventListener("resize", ajustarEnquadramento);
+    ajustarEnquadramento();'''
+    return html.replace(
+        "network = new vis.Network(container, data, options);",
+        "network = new vis.Network(container, data, options);\n" + inicializar_zoom,
+    )
