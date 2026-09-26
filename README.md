@@ -1,5 +1,5 @@
 ---
-title: Sistema de Analise de Remocao
+title: Sistema de Análise de Remoção
 emoji: ⚖️
 colorFrom: blue
 colorTo: green
@@ -10,303 +10,135 @@ pinned: false
 license: mit
 ---
 
-# ⚖️ Sistema de Análise de Remoção de Magistrados
+# Sistema de Análise de Remoção de Magistrados
 
-> Algoritmo em Python para automação, análise e visualização de concursos de remoção de juízes federais, garantindo precisão rigorosa no critério de antiguidade, processamento da cadeia de vacância (efeito dominó) e aplicação de regras restritivas.
+Aplicação para simular a distribuição de vagas em concursos de remoção de magistrados. Lê relações de inscritos, aplica critérios de antiguidade e preferências, acompanha as vagas abertas durante as movimentações e apresenta o resultado para conferência.
 
-![Python](https://img.shields.io/badge/Python-3.12-blue)
-![Data Viz](https://img.shields.io/badge/Visualização-PyVis%20%7C%20NetworkX-orange)
-![Reporting](https://img.shields.io/badge/Relatórios-Excel%20%7C%20OpenPyXL-green)
-![Version](https://img.shields.io/badge/Versão-13.0-brightgreen)
+## Acesso e repositório
 
----
+- **Aplicação publicada:** [Sistema de Remoção no Hugging Face Spaces](https://huggingface.co/spaces/rgsouza2024/sistema-remocao)
+- **Código-fonte:** [repositório no GitHub](https://github.com/rgsouza2024/sistema_remocao), branch `main`
+- **Interface publicada:** Streamlit, com `app.py` como arquivo de entrada do Space.
 
-## 📸 Visualização da Cadeia de Vacância
+Em 25/09/2026, a branch `main` do Space e a branch `main` do GitHub apontavam para o mesmo commit (`33cd0c6`). Essa verificação confirma que estavam sincronizadas naquela data; não confirma sincronização automática para alterações futuras.
 
-O sistema gera um **grafo interativo** que permite visualizar a "Dança das Cadeiras": quem ocupou a vaga de quem e qual unidade foi liberada na sequência.
+## Funcionalidades
 
-![Grafo de Remoção](preview_grafo.png)
+- Importa arquivos Word (`.docx`), Excel (`.xlsx`) e JSON (`.json`).
+- Detecta nomes de colunas comuns mesmo com diferenças de maiúsculas e acentos.
+- Detecta vagas indicadas como disponíveis nas opções ou permite informar a lista manualmente.
+- Aplica a regra automática de congelamento com base no motivo e na data de início da lotação.
+- Processa movimentações em ciclos, reabrindo a lotação de origem e permitindo que candidatos melhorem uma alocação anterior quando uma opção melhor fica disponível.
+- Exibe o quadro de remoções, vagas remanescentes e logs; a interface também permite baixar uma planilha Excel e um grafo HTML.
 
----
+## Regras e dados de entrada
 
-## 🎯 O Desafio
+O arquivo precisa conter estas colunas:
 
-Nos concursos de remoção da magistratura, a movimentação de um juiz gera uma **vacância derivada** (a vaga que ele deixa para trás). O processo envolve complexidades logísticas como:
+| Campo | Uso |
+| --- | --- |
+| `Nome` | Identificação do magistrado |
+| `Matrícula` | Desempate na ordenação por antiguidade |
+| `Lotação Atual` | Origem da movimentação e vaga que poderá ser aberta |
+| `Data de Exercício` | Critério principal de antiguidade |
 
-1.  **Efeito Dominó:** A vaga deixada por um juiz deve ser ofertada imediatamente aos candidatos mais antigos.
-2.  **Candidato Sôfrego (Upgrade):** Se uma vaga prioritária surge tardiamente, o magistrado mais antigo deve ter o direito de trocar sua escolha anterior por esta melhor.
-3.  **Regras de Bloqueio (Congelamento):** Magistrados removidos recentemente (ex: há menos de 1 ano) podem sofrer penalidades na ordem de classificação.
+As colunas de opção devem indicar a posição, como `1ª Opção`, `2ª Opção` e assim por diante. O normalizador reconhece algumas variantes de nomes de colunas.
 
----
+Na interface, as vagas iniciais são detectadas procurando `DISPONÍVEL` nas colunas de opção. A lista pode ser editada antes do processamento. No endpoint da API, a lista também pode ser enviada manualmente.
 
-## 🧠 Arquitetura do Motor de Remoção (V13)
+### Congelamento automático
 
-O núcleo do sistema é o algoritmo `processar_remocao()`, que implementa as regras oficiais do TRF para concursos de remoção.
+O sistema marca como congelado o magistrado cujo motivo da lotação contém “remoção” e cuja lotação começou há menos de 365 dias em relação à data de referência. Dados de lotação ausentes ou inválidos não geram congelamento; quando identificados pelo motor, são incluídos nos alertas de integridade.
 
-### Regras de Negócio Implementadas
+No comportamento atual, o congelamento altera a prioridade: os candidatos congelados ficam depois dos demais na ordenação, mas ainda podem ser processados se houver vaga compatível. A regra não os exclui automaticamente do concurso.
 
-| Regra | Descrição | Implementação |
-|-------|-----------|---------------|
-| **Antiguidade Soberana** | O candidato mais antigo (por Data de Exercício + Matrícula) sempre tem prioridade de escolha | Ordenação do DataFrame antes do processamento |
-| **Restart on Move** | A cada movimentação, o algoritmo reinicia do candidato mais antigo | Loop `while houve_movimentacao` com `break` |
-| **Lookahead Anti-Bloqueio** | O sênior pode ceder a vez se pegar uma vaga bloquearia sua 1ª opção | Função `detectar_bloqueio()` |
-| **Smart Match** | Comparação de nomes de vagas usando word boundaries (regex) | Função `smart_match()` |
+O motor procura a primeira opção disponível, verifica possíveis bloqueios e reinicia a análise após cada movimentação. A comparação dos nomes das vagas normaliza acentos e usa limites de palavra para evitar correspondências parciais como `7ª Vara` dentro de `27ª Vara`.
 
-### Fluxograma do Algoritmo
+## Executar a interface localmente
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    INÍCIO DO PROCESSAMENTO                       │
-├─────────────────────────────────────────────────────────────────┤
-│  1. Ordenar candidatos por [Data de Exercício, Matrícula]       │
-│  2. Inicializar vagas_abertas com vagas do edital               │
-│  3. ciclo = 0                                                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    LOOP PRINCIPAL (while)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  houve_movimentacao = False                                      │
-│  ciclo += 1                                                      │
-│                                                                  │
-│  PARA cada candidato em ordem de antiguidade:                   │
-│    │                                                             │
-│    ├─► Buscar primeira opção disponível em vagas_abertas        │
-│    │                                                             │
-│    ├─► SE encontrou match:                                       │
-│    │     │                                                       │
-│    │     ├─► LOOKAHEAD: detectar_bloqueio()?                    │
-│    │     │     │                                                 │
-│    │     │     ├─► SIM: Ceder vez (log "⏸️ cedeu vez")         │
-│    │     │     │                                                 │
-│    │     │     └─► NÃO: Confirmar remoção                       │
-│    │     │           ├─► Adicionar lotação atual às vagas       │
-│    │     │           ├─► Remover vaga escolhida                 │
-│    │     │           ├─► houve_movimentacao = True              │
-│    │     │           └─► BREAK (restart loop)                   │
-│    │     │                                                       │
-│    └─────┴───────────────────────────────────────────────────────│
-│                                                                  │
-│  SE houve_movimentacao == False: SAIR DO LOOP                   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    FIM - Retornar resultados                     │
-└─────────────────────────────────────────────────────────────────┘
-```
+Requisitos: Python 3.12 e acesso à internet para instalar as dependências.
 
-### Funções Auxiliares do Motor
+No PowerShell:
 
-#### `smart_match(vaga, opcao) → bool`
-
-Compara strings usando **word boundaries** (regex `\b`) para evitar matches incorretos.
-
-```python
-# Exemplo de problema resolvido:
-"7A VARA" in "27A VARA"  # True ❌ (substring match incorreto)
-smart_match("7A VARA", "27A VARA")  # False ✅ (word boundary correto)
-```
-
-**Implementação:**
-```python
-def smart_match(vaga, opcao):
-    pattern = r'\b' + re.escape(vaga) + r'\b'
-    return bool(re.search(pattern, opcao))
-```
-
-#### `detectar_bloqueio(senior, vaga_pretendida, indice) → bool`
-
-Implementa o **Lookahead Anti-Bloqueio** verificando se o sênior bloquearia sua própria 1ª opção ao pegar uma vaga de menor preferência.
-
-**Lógica:**
-1. Se `indice == 0` (é a 1ª opção), não há bloqueio possível
-2. Para cada opção MELHOR (índice menor):
-   - Identificar quem ocupa essa vaga (`get_ocupante_lotacao()`)
-   - Verificar se o ocupante quer a `vaga_pretendida`
-   - Se SIM → **BLOQUEIO DETECTADO** (sênior deve ceder)
-
-**Exemplo Prático:**
-```
-BRUNO (sênior): 1ª opção = 27ª Vara, 3ª opção = 7ª Vara
-JOSÉ MÁRCIO (júnior): Ocupa 27ª Vara, quer 7ª Vara como 2ª opção
-
-Quando 7ª Vara abre:
-├─► BRUNO vê 7ª Vara disponível (sua 3ª opção)
-├─► Lookahead: "Quem ocupa minha 1ª opção (27ª Vara)?"
-│   └─► JOSÉ MÁRCIO ocupa
-├─► Lookahead: "JOSÉ MÁRCIO quer a 7ª Vara?"
-│   └─► SIM
-├─► BLOQUEIO DETECTADO!
-└─► BRUNO cede vez → JOSÉ MÁRCIO pega 7ª Vara → Abre 27ª Vara
-    └─► BRUNO pega 27ª Vara (sua 1ª opção!) ✅
-```
-
-#### `padronizar_texto(texto) → str`
-
-Normaliza strings para comparação uniforme, tratando:
-
-| Transformação | Exemplo |
-|---------------|---------|
-| Maiúsculas | `"7ª Vara"` → `"7ª VARA"` |
-| Símbolos ordinais | `"7ª"` → `"7A"` |
-| Acentos (NFD) | `"Muriaé"` → `"MURIAE"` |
-| Prefixos jurisdicionais | `"DA SJ"`, `"DA SSJ"` → removidos |
-| Espaços múltiplos | `"VARA  ÚNICA"` → `"VARA UNICA"` |
-| Sufixos | `"- DISPONÍVEL"` → removido |
-
----
-
-## 💡 Principais Funcionalidades
-
-### Motor de Remoção
-* **🔍 Lookahead Anti-Bloqueio (V13):** Evita que o candidato mais antigo "dê um tiro no próprio pé" ao pegar uma vaga que bloquearia sua opção preferencial.
-* **❄️ Regra de Congelamento:** Interface para seleção manual de magistrados penalizados por remoção recente.
-* **🔄 Lógica de Upgrade:** Garantia de que o magistrado sempre obtenha a melhor vaga possível.
-* **🛡️ Smart Match:** Comparação precisa de nomes de varas usando regex word boundaries.
-
-### Interface e Usabilidade
-* **🏛️ Identidade Institucional:** Logo do TRF1 no cabeçalho com cores institucionais (#002F6C).
-* **📋 Abas Reorganizadas:** "Quadro de Remoções" como aba padrão, facilitando acesso ao resultado principal.
-* **✅ Validação de Colunas:** Verificação prévia de colunas obrigatórias com mensagens de erro amigáveis.
-* **✅ Validação de Colunas:** Verificação prévia de colunas obrigatórias com mensagens de erro amigáveis.
-* **📂 Suporte Multi-Formato:** Leitura de arquivos **Word (.docx)**, **Excel (.xlsx)** e **JSON (.json)**.
-* **🔤 Normalização Robusta:** Reconhecimento inteligente de colunas independente de acentos ou maiúsculas (ex: "Início da Lotação" = "inicio da lotacao").
-* **❄️ Congelamento Inteligente:** Detecção automática baseada na palavra-chave "remoção" (substring case-insensitive).
-* **📊 Visualização de Grafos:** Mapa visual interativo das movimentações com PyVis (física otimizada).
-* **📑 Relatórios Oficiais:** Planilha `.xlsx` formatada com resultado final e vagas remanescentes.
-
----
-
-## 🚀 Como Usar
-
-1. Acesse a interface web Streamlit.
-2. Arraste o arquivo de inscritos (**DOCX** ou **XLSX**) para a área de upload.
-3. Confira as vagas iniciais detectadas automaticamente.
-4. **(Opcional)** Marque **"Existem inscritos congelados?"** e selecione os nomes.
-5. Clique em **"Iniciar Processamento"**.
-6. Navegue pelas abas: **Quadro de Remoções**, **Resultado Visual**, **Logs**.
-
----
-
-## 🛠️ Stack Tecnológico
-
-| Tecnologia | Uso |
-|------------|-----|
-| **Python 3.12** | Linguagem base |
-| **Streamlit** | Interface Web interativa |
-| **Pandas** | Manipulação de dados e ordenação |
-| **Python-Docx** | Leitura de arquivos Word |
-| **OpenPyXL** | Leitura/escrita de arquivos Excel |
-| **NetworkX + PyVis** | Renderização de grafos interativos |
-| **Regex (re)** | Smart Match com word boundaries |
-
----
-
-## 📁 Estrutura do Projeto
-
-```
-sistema_remocao/
-├── app.py              # Aplicação principal Streamlit (Motor V13)
-├── analise_remocao.py  # Script standalone (versão CLI)
-├── logo_trf1.png       # Logo institucional do TRF1
-├── requirements.txt    # Dependências Python
-├── README.md           # Esta documentação
-└── lib/                # Bibliotecas auxiliares (vis.js, tom-select)
-```
-
----
-
-## 🔧 Instalação Local
-
-```bash
-# Clone o repositório
+```powershell
 git clone https://github.com/rgsouza2024/sistema_remocao.git
 cd sistema_remocao
-
-# Instale as dependências
-pip install -r requirements.txt
-
-# Execute a aplicação
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
----
+O Streamlit informa no terminal o endereço local da aplicação.
 
-## 🔌 Integração via API (V15.0)
+## API REST
 
-O sistema agora conta com uma **API RESTful de alta performance** baseada em FastAPI e totalmente "dockerizada", pronta para ser integrada aos sistemas oficiais do Tribunal.
+A API FastAPI compartilha o motor de processamento com a interface.
 
-### Executando com Docker
+### Executar com Docker
 
-Não é necessário instalar Python ou dependências. Basta ter o Docker instalado.
+Na raiz do repositório:
 
-1. **Construir a imagem:**
-   ```bash
-   docker build -t api-remocao .
-   ```
+```bash
+docker build -t sistema-remocao-api .
+docker run --rm -p 8000:8000 sistema-remocao-api
+```
 
-2. **Rodar o container:**
-   ```bash
-   docker run -d -p 8000:8000 api-remocao
-   ```
+Depois, abra [`http://localhost:8000/docs`](http://localhost:8000/docs) para consultar e experimentar a documentação Swagger.
 
-3. **Acessar Documentação Interativa (Swagger):**
-   Acesse **[http://localhost:8000/docs](http://localhost:8000/docs)** no seu navegador.
-   Lá você pode testar o endpoint de upload diretamente.
+Para execução local no Windows, instale as dependências da API e rode o script de desenvolvimento:
 
-### Endpoints Principais
+```powershell
+python -m pip install -r requirements_api.txt
+.\run_api.ps1
+```
 
-*   **`POST /analisar-remocao`**:
-    *   **Input:** Arquivo `.json`, `.xlsx` ou `.docx`.
-    *   **Parâmetros Opcionais:** `data_referencia` (para congelamento), `vagas_edital` (lista manual).
-    *   **Output:** JSON contendo a lista de remoções processada, lista de congelados e vagas remanescentes.
+O script usa `uvicorn --reload` e escuta apenas em `127.0.0.1`; é destinado ao desenvolvimento local.
 
----
+### Endpoints
 
-## 📝 Changelog
+| Método e caminho | Descrição |
+| --- | --- |
+| `GET /` | Retorna um status simples da API |
+| `POST /analisar-remocao` | Recebe um arquivo e retorna a análise em JSON |
 
-### V15.0 (2026-01-22) - API & Docker
-- 🚀 **Nova API REST:** Interface FastAPI criada em `api.py`.
-- 🐳 **Docker:** Adicionado `Dockerfile` para deployment simplificado.
-- 🏗️ **Refatoração Core:** Lógica de negócio isolada em `motor_remocao.py`, desacoplada do Streamlit.
-- 🧪 **Testes:** Scripts de validação da API e do motor.
+O `POST /analisar-remocao` recebe `multipart/form-data`:
 
-### V13.2 (2026-01-19) - Robustez e Novos Formatos
-- ✨ **Suporte a JSON:** Agora aceita arquivos `.json` (lista de objetos) além de Excel e Word.
-- ✨ **Normalização de Colunas:** O sistema agora é "Case & Accent Insensitive". Aceita "Início da Lotação", "inicio da lotacao", "INICIO_LOTA", etc.
-- ✨ **Congelamento Automático:** Regra de congelamento baseada na palavra-chave "remocao" (substring). Detecta "Remoção a Pedido", "REMOÇÃO", etc.
-- ✨ **Detecção de Opções:** Normalização automática de colunas de opções (ex: "1ª OPÇÃO" -> "1ª Opção").
+| Campo | Obrigatório | Descrição |
+| --- | --- | --- |
+| `file` | Sim | Arquivo `.docx`, `.xlsx` ou `.json` |
+| `data_referencia` | Não | Data no formato `YYYY-MM-DD` ou `DD/MM/YYYY`; se omitida, usa a data atual |
+| `vagas_edital` | Não | Vagas separadas por ponto e vírgula ou array JSON; se omitido, tenta detectar as vagas no arquivo |
 
-### V13.1 (2026-01-16) - Melhorias de UI/UX
-- 🎨 **Identidade Institucional:** Adicionado logo do TRF1 no cabeçalho
-- 🎨 **Cor Institucional:** Título em azul oficial (#002F6C)
-- 📋 **Abas Reorganizadas:** "Quadro de Remoções" como aba principal (antes era "Resultado Visual")
-- ⚙️ **Expander Colapsado:** Configurações do Edital iniciam recolhidas por padrão
-- ✅ **Validação de Colunas:** Erro amigável quando colunas obrigatórias estão faltando
-- 📊 **Grafo Otimizado:** Ajustes na física (spring_length=300) para melhor visualização
+Exemplo com `curl.exe` no PowerShell:
 
-### V13 (2026-01-16)
-- ✨ **Lookahead Anti-Bloqueio:** Novo algoritmo que detecta deadlocks e permite que o sênior ceda a vez estrategicamente
-- ✨ **Smart Match:** Comparação com word boundaries evita match incorreto, por exemplo, entre "7A VARA" e "27A VARA"
-- 🔧 Funções auxiliares: `detectar_bloqueio()`, `get_ocupante_lotacao()`, `smart_match()`
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/analisar-remocao" `
+  -F "file=@inscritos.xlsx" `
+  -F "data_referencia=30/01/2026" `
+  -F "vagas_edital=7ª Vara;8ª Vara"
+```
 
-### V12 (2026-01-16)
-- 🔧 Regra de Congelamento com seleção manual de magistrados
+A resposta inclui `total_movimentacoes`, `movimentacoes`, `vagas_remanescentes`, `magistrados_congelados`, `alertas_integridade`, `logs` e `data_referencia_utilizada`. A API retorna os dados em JSON; os downloads de Excel e grafo estão disponíveis na interface Streamlit.
 
-### V11
-- 🔧 Lógica de Upgrade (troca de vaga quando surge opção melhor)
-- 🔧 Algoritmo Restart on Move
+### Observações de implantação
 
----
+- A API não implementa autenticação nem limite próprio de tamanho para arquivos. Antes de disponibilizá-la fora de um ambiente local ou controlado, configure controle de acesso e limites na infraestrutura que a publica.
+- No código atual, se `data_referencia` for informada em formato inválido, a API mantém a data atual como padrão. Confira `data_referencia_utilizada` na resposta.
 
-## 👨‍💻 Autor
+## Estrutura principal
 
-Desenvolvido por **Rodrigo Gonçalves de Souza** - Juiz Federal do TRF da 1ª Região.
+| Arquivo | Responsabilidade |
+| --- | --- |
+| `app.py` | Interface Streamlit e fluxo de interação |
+| `api.py` | Endpoints FastAPI e validações da requisição |
+| `motor_remocao.py` | Leitura, normalização, congelamento, processamento e geração de resultados |
+| `requirements.txt` | Dependências gerais da aplicação, incluindo Streamlit e API |
+| `requirements_api.txt` | Dependências da API e ferramentas usadas na validação |
+| `Dockerfile` | Imagem e inicialização da API |
 
----
+O script standalone legado `analise_remocao.py` foi removido. Para executar o sistema, use `app.py` (Streamlit) ou `api.py` (FastAPI); ambos compartilham o motor em `motor_remocao.py`.
 
-## 📄 Licença
+## Licença
 
-MIT License - Veja o arquivo LICENSE para detalhes.
+Os metadados deste Space declaram licença MIT. Este repositório não contém atualmente um arquivo `LICENSE` com o texto integral da licença.
