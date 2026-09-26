@@ -77,6 +77,11 @@ st.markdown("""
     .st-key-configuracao [data-testid="stElementContainer"] {
         width: 100%;
     }
+    .st-key-configuracao [data-testid="stButton"] {
+        width: 100% !important; /* o Streamlit fixa a largura da página via estilo inline */
+        display: flex;
+        justify-content: center;
+    }
     [data-testid="stMainBlockContainer"] h1,
     [data-testid="stMainBlockContainer"] h2,
     [data-testid="stMainBlockContainer"] h3 {
@@ -304,7 +309,7 @@ if uploaded_file is not None:
                 )
                 st.caption("Magistrados com dados incompletos ou motivos neutros não serão congelados.")
         
-        processar = area_configuracao.button("Iniciar processamento da remoção", type="primary")
+        processar = area_configuracao.button("Iniciar o processamento", type="primary")
         aviso_resultado = st.empty()
         area_resultado = st.empty()
 
