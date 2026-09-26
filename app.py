@@ -1,6 +1,7 @@
 # app.py Versão 15.0 - Refatorado com motor_remocao
 
 import streamlit as st
+import base64
 import pandas as pd
 from html import escape
 
@@ -45,9 +46,9 @@ st.markdown("""
         --type-subsection: 1.25rem;
         --type-body: 1rem;
         --type-label: 0.875rem;
-        --type-caption: 0.8125rem;
+        --type-caption: 0.875rem;
         --leading-heading: 1.25;
-        --leading-body: 1.5;
+        --leading-body: 1.6;
         --space-1: 0.25rem;
         --space-2: 0.5rem;
         --space-3: 0.75rem;
@@ -122,10 +123,23 @@ st.markdown("""
     [data-testid="stAlertContentWarning"] {
         color: var(--color-warning-text);
     }
-    [data-testid="stDecoration"] { display: none; }
-    div[data-testid="stImage"] {
-        margin-top: var(--space-4);
+    [data-testid="stFileUploaderDropzoneInstructions"] svg {
+        color: var(--color-text-muted);
     }
+    [data-testid="stDecoration"] { display: none; }
+    .cabecalho {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-4) var(--space-6);
+        margin: var(--space-4) 0 var(--space-6);
+    }
+    .cabecalho img { width: 248px; height: auto; }
+    [data-testid="stMainBlockContainer"] .cabecalho h1 {
+        margin: 0;
+        padding: 0;
+    }
+    .cabecalho [data-testid="stHeaderActionElements"] { display: none; }
     .cadeia { margin-bottom: var(--space-6); }
     .cadeia-titulo {
         font-size: var(--type-label);
@@ -217,11 +231,14 @@ def renderizar_cadeias(cadeias):
     return "".join(blocos)
 
 # --- CABEÇALHO COM LOGO ---
-col_logo, col_titulo = st.columns([1, 4])
-with col_logo:
-    st.image("logo_trf1.png", width=320)
-with col_titulo:
-    st.title("Sistema de Análise de Remoção de Magistrados", anchor=False)
+with open("logo_trf1.png", "rb") as arquivo_logo:
+    logo_base64 = base64.b64encode(arquivo_logo.read()).decode()
+st.markdown(
+    f'<header class="cabecalho"><img src="data:image/png;base64,{logo_base64}" '
+    'alt="Justiça Federal – Tribunal Regional Federal da 1ª Região">'
+    '<h1>Sistema de Análise de Remoção de Magistrados</h1></header>',
+    unsafe_allow_html=True
+)
 
 st.markdown("Envie a relação de inscritos em formato **Word (.docx)**, **Excel (.xlsx)** ou **JSON (.json)**.")
 
@@ -328,7 +345,7 @@ if uploaded_file is not None:
                     if not df_resultado.empty:
                         with area_resultado.container():
                             st.success("Análise concluída.")
-                            tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Cadeias de remoção", "Logs"])
+                            tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Cadeias de remoção", "Logs de auditoria"])
 
                             with tab1:
                                 if magistrados_congelados_nomes:
@@ -352,6 +369,7 @@ if uploaded_file is not None:
                                     nomes_unidades.setdefault(padronizar_texto(origem), origem)
                                 df_exibicao = df_resultado.assign(Destino=df_resultado['Vaga'].map(lambda v: nomes_unidades.get(v, v)))
 
+                                df_exibicao['Opção Nº'] = df_exibicao['Opção Nº'].map(lambda n: f"{n}ª")
                                 st.dataframe(df_exibicao[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True, hide_index=True)
                                 excel_data = gerar_excel_em_memoria(df_resultado.drop(columns=['Vaga']), sobras)
                                 st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -370,7 +388,7 @@ if uploaded_file is not None:
                                     linha.removeprefix("\u23f8\ufe0f ").removeprefix("\U0001f504 ").removeprefix("\u2705 ")
                                     for linha in log
                                 )
-                                st.text_area("Logs", value=logs_apresentacao, height=400)
+                                st.text_area("Logs de auditoria", value=logs_apresentacao, height=400)
                     else:
                         with area_resultado.container():
                             st.warning("Nenhuma movimentação gerada.")
