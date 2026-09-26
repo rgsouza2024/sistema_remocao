@@ -20,7 +20,7 @@ Aplicação para simular a distribuição de vagas em concursos de remoção de 
 - **Código-fonte:** [repositório no GitHub](https://github.com/rgsouza2024/sistema_remocao), branch `main`
 - **Interface publicada:** Streamlit, com `app.py` como arquivo de entrada do Space.
 
-Em 25/09/2026, a branch `main` do Space e a branch `main` do GitHub apontavam para o mesmo commit (`33cd0c6`). Essa verificação confirma que estavam sincronizadas naquela data; não confirma sincronização automática para alterações futuras.
+Em 26/09/2026, o Space ainda publicava o commit `33cd0c6`. As alterações posteriores da branch `main` do GitHub (cadeias de remoção e ajustes de interface) não estavam publicadas. O Space não se sincroniza automaticamente com o GitHub: cada atualização precisa ser enviada ao Space.
 
 ## Funcionalidades
 
@@ -29,7 +29,8 @@ Em 25/09/2026, a branch `main` do Space e a branch `main` do GitHub apontavam pa
 - Detecta vagas indicadas como disponíveis nas opções ou permite informar a lista manualmente.
 - Aplica a regra automática de congelamento com base no motivo e na data de início da lotação.
 - Processa movimentações em ciclos, reabrindo a lotação de origem e permitindo que candidatos melhorem uma alocação anterior quando uma opção melhor fica disponível.
-- Exibe o quadro de remoções, vagas remanescentes e logs; a interface também permite baixar uma planilha Excel.
+- Exibe o resultado em três abas: quadro de remoções (com as vagas remanescentes e o download da planilha Excel), cadeias de remoção e logs de auditoria.
+- Indica na interface que o resultado é apenas uma simulação, e não resultado oficial. A planilha Excel exportada não traz essa ressalva.
 - Mostra as cadeias de remoção: cada cadeia parte de uma vaga do edital e segue pelas lotações abertas por quem se removeu, até a vaga remanescente. Movimentações que não partem do edital aparecem como permutas. A montagem pressupõe um único magistrado por lotação, o que vale porque titulares e substitutos concorrem em concursos separados.
 
 ## Regras e dados de entrada
