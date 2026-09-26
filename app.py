@@ -371,6 +371,7 @@ if uploaded_file is not None:
                             tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Cadeias de remoção", "Logs de auditoria"])
 
                             with tab1:
+                                st.caption("Resultado do processamento da remoção. Trata-se apenas de simulação, e não de resultado oficial.")
                                 if magistrados_congelados_nomes:
                                     lista_congelados = "\n".join(f"- {m}" for m in magistrados_congelados_nomes)
                                     st.warning(
@@ -411,7 +412,8 @@ if uploaded_file is not None:
                                     linha.removeprefix("\u23f8\ufe0f ").removeprefix("\U0001f504 ").removeprefix("\u2705 ")
                                     for linha in log
                                 )
-                                st.text_area("Logs de auditoria", value=logs_apresentacao, height=400)
+                                st.caption("Registro de cada passo do processamento: quem assumiu cada vaga, em qual opção, e qual lotação ficou aberta em seguida. Também mostra trocas por uma opção melhor e os casos em que um magistrado cedeu a vez.")
+                                st.text_area("Logs de auditoria", value=logs_apresentacao, height=400, label_visibility="collapsed")
                     else:
                         with area_resultado.container():
                             st.warning("Nenhuma movimentação gerada.")
