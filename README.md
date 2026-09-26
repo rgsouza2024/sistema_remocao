@@ -133,11 +133,15 @@ A resposta inclui `total_movimentacoes`, `movimentacoes`, `vagas_remanescentes`,
 | `app.py` | Interface Streamlit e fluxo de interação |
 | `api.py` | Endpoints FastAPI e validações da requisição |
 | `motor_remocao.py` | Leitura, normalização, congelamento, processamento e geração de resultados |
-| `requirements.txt` | Dependências gerais da aplicação, incluindo Streamlit e API |
-| `requirements_api.txt` | Dependências da API e ferramentas usadas na validação |
+| `requirements.txt` | Dependências da interface Streamlit e do motor |
+| `requirements_api.txt` | Dependências da API e do motor |
 | `Dockerfile` | Imagem e inicialização da API |
 
 O script standalone legado `analise_remocao.py` foi removido. Para executar o sistema, use `app.py` (Streamlit) ou `api.py` (FastAPI); ambos compartilham o motor em `motor_remocao.py`.
+
+## Testes
+
+O repositório não mantém atualmente uma suíte automatizada. Os antigos `test_api.py` e `test_refactor.py` foram removidos porque apenas imprimiam resultados e não validavam as respostas com asserções. A API pode ser verificada manualmente pela documentação em `/docs`.
 
 ## Licença
 
