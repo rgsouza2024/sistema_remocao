@@ -15,6 +15,7 @@ from motor_remocao import (
     processar_remocao, 
     gerar_excel_em_memoria, 
     montar_cadeias,
+    padronizar_texto,
     aplicar_congelamento
 )
 
@@ -26,6 +27,16 @@ st.set_page_config(
 )
 
 # --- AJUSTES VISUAIS ---
+# Cores base vêm do tema em .streamlit/config.toml (fonte única)
+st.markdown(f"""
+    <style>
+    :root {{
+        --color-primary: {st.get_option("theme.primaryColor")};
+        --color-text: {st.get_option("theme.textColor")};
+        --color-surface: {st.get_option("theme.secondaryBackgroundColor")};
+    }}
+    </style>
+""", unsafe_allow_html=True)
 st.markdown("""
     <style>
     :root {
@@ -44,12 +55,10 @@ st.markdown("""
         --space-6: 1.5rem;
         --space-8: 2rem;
         --space-12: 3rem;
-        --color-primary: #002F6C;
-        --color-text: #202A36;
         --color-text-muted: #56626F;
         --color-surface: #F3F6F8;
         --color-border: #D3DAE1;
-        --color-warning-surface: #FFF4D6;
+        --color-warning-surface: #FFF2DA;
         --color-warning-text: #6B4500;
         --radius: 0.5rem;
     }
@@ -83,6 +92,16 @@ st.markdown("""
         line-height: var(--leading-body);
         margin-bottom: var(--space-4);
     }
+    [data-testid="stMainBlockContainer"] button [data-testid="stMarkdownContainer"] > p,
+    [data-testid="stMainBlockContainer"] summary [data-testid="stMarkdownContainer"] > p {
+        margin-bottom: 0;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stExpander"] summary p {
+        font-weight: 600;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stExpanderDetails"] {
+        padding-top: var(--space-4);
+    }
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] p {
         font-size: var(--type-label);
         font-weight: 600;
@@ -96,6 +115,14 @@ st.markdown("""
         font-size: var(--type-body);
         line-height: var(--leading-body);
     }
+    [data-testid="stCaptionContainer"],
+    [data-testid="stFileUploader"] small {
+        color: var(--color-text-muted);
+    }
+    [data-testid="stAlertContentWarning"] {
+        color: var(--color-warning-text);
+    }
+    [data-testid="stDecoration"] { display: none; }
     div[data-testid="stImage"] {
         margin-top: var(--space-4);
     }
@@ -194,7 +221,7 @@ col_logo, col_titulo = st.columns([1, 4])
 with col_logo:
     st.image("logo_trf1.png", width=320)
 with col_titulo:
-    st.title("Sistema de Análise de Remoção de Magistrados")
+    st.title("Sistema de Análise de Remoção de Magistrados", anchor=False)
 
 st.markdown("Envie a relação de inscritos em formato **Word (.docx)**, **Excel (.xlsx)** ou **JSON (.json)**.")
 
@@ -218,33 +245,35 @@ if uploaded_file is not None:
         vagas_detectadas = detectar_vagas_do_edital(df_bruto)
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
-        st.info(f"O sistema detectou {len(vagas_detectadas)} vagas sendo disputadas.")
+        qtd_vagas = len(vagas_detectadas)
+        st.info(f"O sistema detectou {qtd_vagas} {'vaga disputada' if qtd_vagas == 1 else 'vagas disputadas'}.")
         
         # --- ÁREA DE CONFIGURAÇÃO (AUTOMAÇÃO DO CONGELAMENTO) ---
-        with st.expander("Configurações do Edital e Regras", expanded=False):
+        with st.expander("Configurações do edital e regras", expanded=False):
             col_vagas, col_regras = st.columns([0.6, 0.4])
             
             with col_vagas:
                 texto_vagas_finais = st.text_area(
-                    "Vagas disponíveis (uma por linha):", 
+                    "Vagas disponíveis (uma por linha)", 
                     value=texto_padrao, 
                     height=150
                 )
             
             with col_regras:
-                st.write("### Regra de Congelamento")
+                st.subheader("Regra de congelamento", anchor=False)
                 st.info("Apenas o motivo 'Remoção' gera congelamento de 1 ano. Demais motivos são neutros.")
                 data_referencia = st.date_input(
-                    "Data de Referência (Data da Nova Remoção):",
+                    "Data de referência (data da nova remoção)",
                     format="DD/MM/YYYY",
                     help="Data utilizada para calcular o interstício de 1 ano. Se não informada, considera hoje."
                 )
                 st.caption("Magistrados com dados incompletos ou motivos neutros não serão congelados.")
         
+        processar = st.button("Iniciar processamento da remoção", type="primary")
         aviso_resultado = st.empty()
         area_resultado = st.empty()
 
-        if st.button("Iniciar processamento da remoção", type="primary"):
+        if processar:
             with st.spinner('Processando...'):
                 vagas_iniciais = [v.strip() for v in texto_vagas_finais.split('\n') if v.strip()]
                 
@@ -265,14 +294,15 @@ if uploaded_file is not None:
                 
                 if colunas_automacao_faltando:
                     with aviso_resultado.container():
-                        st.warning(f"**Automação limitada:** Colunas `{', '.join(colunas_automacao_faltando)}` não encontradas. O congelamento automático será desativado para todos.")
+                        colunas_citadas = " e ".join(f"“{col}”" for col in colunas_automacao_faltando)
+                        st.warning(f"**Automação limitada:** colunas {colunas_citadas} não encontradas. O congelamento automático será desativado para todos.")
                 
                 # Tratamento de Datas
                 df_bruto['Data de Exercício'] = pd.to_datetime(df_bruto['Data de Exercício'], dayfirst=True, errors='coerce')
                 
                 if df_bruto['Data de Exercício'].isna().all() and not df_bruto.empty:
                     with area_resultado.container():
-                        st.error("ERRO: Datas inválidas.")
+                        st.error("Nenhuma data de exercício válida foi encontrada no arquivo.")
                 else:
                     # --- APLICAÇÃO DA LÓGICA DE CONGELAMENTO AUTOMÁTICO (VIA MOTOR) ---
                     df_bruto, magistrados_congelados_nomes, magistrados_dados_incompletos = aplicar_congelamento(df_bruto, data_referencia)
@@ -297,14 +327,16 @@ if uploaded_file is not None:
                     
                     if not df_resultado.empty:
                         with area_resultado.container():
-                            st.success("Análise concluída!")
+                            st.success("Análise concluída.")
                             tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Cadeias de remoção", "Logs"])
 
                             with tab1:
                                 if magistrados_congelados_nomes:
-                                    with st.warning("Magistrados congelados automaticamente (1 ano):"):
-                                        for m in magistrados_congelados_nomes:
-                                            st.markdown(f"- {m}")
+                                    lista_congelados = "\n".join(f"- {m}" for m in magistrados_congelados_nomes)
+                                    st.warning(
+                                        "**Magistrados congelados** (remoção há menos de 1 ano). "
+                                        "Participam do concurso, mas depois dos demais:\n\n" + lista_congelados
+                                    )
 
                                 if magistrados_dados_incompletos:
                                     with st.expander("Alerta de integridade: dados incompletos", expanded=False):
@@ -312,16 +344,23 @@ if uploaded_file is not None:
                                         for m in magistrados_dados_incompletos:
                                             st.markdown(f"- {m}")
 
-                                st.dataframe(df_resultado[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True)
-                                c1, c2 = st.columns(2)
-                                with c1:
-                                    if sobras:
-                                        st.write("### Vagas Remanescentes")
-                                        st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
-                                    else: st.info("Sem vagas.")
-                                with c2:
-                                    excel_data = gerar_excel_em_memoria(df_resultado.drop(columns=['Vaga']), sobras)
-                                    st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                # Exibe as unidades com o nome original (o motor devolve a chave normalizada)
+                                nomes_unidades = {}
+                                for vaga in vagas_iniciais:
+                                    nomes_unidades.setdefault(padronizar_texto(vaga), vaga)
+                                for origem in df_resultado['Origem']:
+                                    nomes_unidades.setdefault(padronizar_texto(origem), origem)
+                                df_exibicao = df_resultado.assign(Destino=df_resultado['Vaga'].map(lambda v: nomes_unidades.get(v, v)))
+
+                                st.dataframe(df_exibicao[['Nome', 'Origem', 'Destino', 'Opção Nº']], use_container_width=True, hide_index=True)
+                                excel_data = gerar_excel_em_memoria(df_resultado.drop(columns=['Vaga']), sobras)
+                                st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+                                st.subheader("Vagas remanescentes", anchor=False)
+                                if sobras:
+                                    st.dataframe(pd.DataFrame([nomes_unidades.get(v, v) for v in sobras], columns=["Unidade"]), use_container_width=True, hide_index=True)
+                                else:
+                                    st.info("Nenhuma vaga remanescente.")
                             with tab2:
                                 st.caption("Cada cadeia começa numa vaga do edital. Quem assume uma vaga deixa a própria lotação, que se torna a vaga seguinte da cadeia, até restar uma vaga remanescente.")
                                 cadeias = montar_cadeias(df_resultado, vagas_iniciais)
