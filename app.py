@@ -229,10 +229,8 @@ if uploaded_file is not None:
                                     st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                             with tab2:
                                 html_grafo = gerar_html_grafo(df_resultado)
-                                _, coluna_grafo, _ = st.columns([1, 1.5, 1])
-                                with coluna_grafo:
-                                    components.html(html_grafo, height=620, scrolling=False)
-                                    st.download_button("Baixar grafo (HTML)", html_grafo, "Grafo.html", "text/html")
+                                components.html(html_grafo, height=600, scrolling=False)
+                                st.download_button("Baixar grafo (HTML)", html_grafo, "Grafo.html", "text/html")
                             with tab3:
                                 logs_apresentacao = "\n".join(
                                     linha.removeprefix("\u23f8\ufe0f ").removeprefix("\U0001f504 ").removeprefix("\u2705 ")
