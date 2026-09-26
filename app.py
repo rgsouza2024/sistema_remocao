@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import streamlit.components.v1 as components
+from html import escape
 
 # Importando o motor "Cérebro"
 from motor_remocao import (
@@ -14,7 +14,7 @@ from motor_remocao import (
     remove_acentos,
     processar_remocao, 
     gerar_excel_em_memoria, 
-    gerar_html_grafo,
+    montar_cadeias,
     aplicar_congelamento
 )
 
@@ -44,6 +44,14 @@ st.markdown("""
         --space-6: 1.5rem;
         --space-8: 2rem;
         --space-12: 3rem;
+        --color-primary: #002F6C;
+        --color-text: #202A36;
+        --color-text-muted: #56626F;
+        --color-surface: #F3F6F8;
+        --color-border: #D3DAE1;
+        --color-warning-surface: #FFF4D6;
+        --color-warning-text: #6B4500;
+        --radius: 0.5rem;
     }
     [data-testid="stMainBlockContainer"] {
         padding-top: var(--space-8);
@@ -91,8 +99,95 @@ st.markdown("""
     div[data-testid="stImage"] {
         margin-top: var(--space-4);
     }
+    .cadeia { margin-bottom: var(--space-6); }
+    .cadeia-titulo {
+        font-size: var(--type-label);
+        font-weight: 600;
+        color: var(--color-text-muted);
+        margin: 0 0 var(--space-2);
+    }
+    .cadeia ol {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    .cadeia li {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin: 0;
+    }
+    .cadeia-seta {
+        font-size: var(--type-subsection);
+        color: var(--color-text-muted);
+    }
+    .etapa {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        width: 15rem;
+        padding: var(--space-3) var(--space-4);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        color: var(--color-text);
+        line-height: var(--leading-body);
+    }
+    .etapa-edital { border-left: 4px solid var(--color-primary); }
+    .etapa-sobra {
+        background: var(--color-warning-surface);
+        border-style: dashed;
+    }
+    .etapa-rotulo {
+        font-size: var(--type-caption);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-text-muted);
+    }
+    .etapa-sobra .etapa-rotulo { color: var(--color-warning-text); }
+    .etapa-unidade { font-size: var(--type-body); font-weight: 600; }
+    .etapa-ocupante { font-size: var(--type-label); }
     </style>
 """, unsafe_allow_html=True)
+
+def renderizar_cadeias(cadeias):
+    """Monta o HTML das cadeias de remoção (uma linha de cartões por cadeia)."""
+    blocos = []
+    numero = 0
+    for cadeia in cadeias:
+        etapas = cadeia['Etapas']
+        remocoes = sum(1 for e in etapas if e['Magistrado'])
+        if cadeia['Permuta']:
+            titulo = f"Permuta · {remocoes} remoções · a última vaga fecha o ciclo"
+        else:
+            numero += 1
+            plural = "remoção" if remocoes == 1 else "remoções"
+            titulo = f"Cadeia {numero} · {remocoes} {plural}" if remocoes else f"Cadeia {numero} · vaga não preenchida"
+        itens = []
+        for i, etapa in enumerate(etapas):
+            classes = ["etapa"]
+            if etapa['Magistrado']:
+                rotulo = "Vaga do edital" if i == 0 and not cadeia['Permuta'] else "Vaga aberta"
+                ocupante = f"Assumida por {escape(str(etapa['Magistrado']))} ·&nbsp;{etapa['Opção Nº']}ª&nbsp;opção"
+            else:
+                rotulo = "Vaga do edital · remanescente" if i == 0 else "Vaga remanescente"
+                ocupante = "Não preenchida"
+                classes.append("etapa-sobra")
+            if i == 0 and not cadeia['Permuta']:
+                classes.append("etapa-edital")
+            seta = '<span class="cadeia-seta" aria-hidden="true">→</span>' if i else ""
+            itens.append(
+                f'<li>{seta}<div class="{" ".join(classes)}">'
+                f'<span class="etapa-rotulo">{rotulo}</span>'
+                f'<span class="etapa-unidade">{escape(str(etapa["Unidade"]))}</span>'
+                f'<span class="etapa-ocupante">{ocupante}</span></div></li>'
+            )
+        blocos.append(f'<section class="cadeia"><p class="cadeia-titulo">{titulo}</p><ol>{"".join(itens)}</ol></section>')
+    return "".join(blocos)
 
 # --- CABEÇALHO COM LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
@@ -203,7 +298,7 @@ if uploaded_file is not None:
                     if not df_resultado.empty:
                         with area_resultado.container():
                             st.success("Análise concluída!")
-                            tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Resultado visual", "Logs"])
+                            tab1, tab2, tab3 = st.tabs(["Quadro de remoções", "Cadeias de remoção", "Logs"])
 
                             with tab1:
                                 if magistrados_congelados_nomes:
@@ -225,12 +320,12 @@ if uploaded_file is not None:
                                         st.dataframe(pd.DataFrame(list(sobras), columns=["Unidade"]), use_container_width=True)
                                     else: st.info("Sem vagas.")
                                 with c2:
-                                    excel_data = gerar_excel_em_memoria(df_resultado, sobras)
+                                    excel_data = gerar_excel_em_memoria(df_resultado.drop(columns=['Vaga']), sobras)
                                     st.download_button("Baixar Excel", excel_data, "Resultado.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                             with tab2:
-                                html_grafo = gerar_html_grafo(df_resultado)
-                                components.html(html_grafo, height=600, scrolling=False)
-                                st.download_button("Baixar grafo (HTML)", html_grafo, "Grafo.html", "text/html")
+                                st.caption("Cada cadeia começa numa vaga do edital. Quem assume uma vaga deixa a própria lotação, que se torna a vaga seguinte da cadeia, até restar uma vaga remanescente.")
+                                cadeias = montar_cadeias(df_resultado, vagas_iniciais)
+                                st.markdown(renderizar_cadeias(cadeias), unsafe_allow_html=True)
                             with tab3:
                                 logs_apresentacao = "\n".join(
                                     linha.removeprefix("\u23f8\ufe0f ").removeprefix("\U0001f504 ").removeprefix("\u2705 ")

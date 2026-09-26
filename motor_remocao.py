@@ -5,7 +5,6 @@
 import pandas as pd
 from docx import Document
 import networkx as nx
-from pyvis.network import Network
 from openpyxl.styles import Alignment
 import io
 import unicodedata
@@ -104,16 +103,6 @@ def detectar_vagas_do_edital(df):
                 nome_limpo = val.split(" - ")[0].strip() 
                 vagas_detectadas.add(nome_limpo)
     return list(vagas_detectadas)
-
-def encurtar_nome(texto):
-    if not texto: return "EXTERNO"
-    texto = padronizar_texto(texto)
-    texto = texto.replace("SUBSECAO JUDICIARIA DE ", "").replace("SECAO JUDICIARIA DE ", "")
-    texto = texto.replace("SECAO JUDICIARIA DO ", "").replace("MINAS GERAIS", "MG")
-    texto = texto.replace("VARA UNICA", "V.UNICA").replace("RELATORIA", "REL")
-    if len(texto) > 30:
-        return texto[:28] + "..."
-    return texto
 
 def remove_acentos(texto):
     if not isinstance(texto, str): return str(texto)
@@ -380,9 +369,51 @@ def processar_remocao(df, vagas_iniciais_lista):
             'Nome': dados['Nome'],
             'Origem': dados['Origem'],
             'Destino': dados['DestinoTexto'],
-            'Opção Nº': dados['Opção Nº']
+            'Opção Nº': dados['Opção Nº'],
+            'Vaga': dados['Destino']  # Chave normalizada da vaga ocupada (usada nas cadeias)
         })
     return pd.DataFrame(lista_final), log_movimentacoes, vagas_abertas
+
+def montar_cadeias(df_resultado, vagas_iniciais):
+    """
+    Organiza as movimentações em cadeias: cada cadeia parte de uma vaga do edital
+    e segue pelas lotações de origem que foram sendo abertas, até uma vaga remanescente.
+    Movimentações não alcançadas a partir do edital formam ciclos (permutas).
+    Pressupõe um único magistrado por lotação.
+    """
+    nomes = {}
+    for vaga in vagas_iniciais:
+        nomes.setdefault(padronizar_texto(vaga), vaga)
+    ocupacoes = {}
+    for _, mov in df_resultado.iterrows():
+        ocupacoes[mov['Vaga']] = mov
+        nomes.setdefault(padronizar_texto(mov['Origem']), mov['Origem'])
+
+    visitadas = set()
+
+    def percorrer(unidade):
+        etapas = []
+        while unidade and unidade not in visitadas:
+            visitadas.add(unidade)
+            mov = ocupacoes.get(unidade)
+            etapas.append({
+                'Unidade': nomes.get(unidade, unidade),
+                'Magistrado': None if mov is None else mov['Nome'],
+                'Opção Nº': None if mov is None else mov['Opção Nº']
+            })
+            if mov is None:
+                break
+            unidade = padronizar_texto(mov['Origem'])
+        return etapas
+
+    cadeias = []
+    for vaga in dict.fromkeys(padronizar_texto(v) for v in vagas_iniciais):
+        if vaga and vaga not in visitadas:
+            cadeias.append({'Permuta': False, 'Etapas': percorrer(vaga)})
+    for vaga in ocupacoes:
+        if vaga not in visitadas:
+            cadeias.append({'Permuta': True, 'Etapas': percorrer(vaga)})
+    return cadeias
 
 # --- EXPORTAÇÃO ---
 
@@ -398,46 +429,3 @@ def gerar_excel_em_memoria(df_resultado, sobras):
         for i in range(len(df_sobras)):
             worksheet[f'I{i+2}'].alignment = estilo_esquerda
     return output.getvalue()
-
-def gerar_html_grafo(df_resultado):
-    net = Network(height='600px', width='100%', bgcolor='white', font_color='black', directed=True, cdn_resources='in_line')
-    net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=600, overlap=1)
-    net.options.physics.stabilization.fit = False
-    for index, row in df_resultado.iterrows():
-        partes_nome = row['Nome'].split(" ")
-        juiz_curto = partes_nome[0] + " " + partes_nome[-1] 
-        origem = encurtar_nome(row['Origem'])
-        destino = encurtar_nome(row['Destino'])
-        if not origem: origem = "EXTERNO"
-        net.add_node(origem, label=origem, color='#ff6b6b', title="Origem") 
-        net.add_node(destino, label=destino, color='#51cf66', title="Destino")
-        net.add_edge(origem, destino, title=f"Magistrado: {row['Nome']}", label=juiz_curto, color='black',
-            font={'size': 8, 'align': 'top', 'color': 'black', 'background': 'white', 'strokeWidth': 0})
-    html = net.generate_html()
-    inicializar_zoom = '''var enquadramentoDefinido = false;
-    var temporizadorEnquadramento = null;
-    function ajustarEnquadramento() {
-        var dimensoes = container.getBoundingClientRect();
-        if (enquadramentoDefinido || !network.getNodeIds().length || !dimensoes.width || !dimensoes.height) {
-            return;
-        }
-        clearTimeout(temporizadorEnquadramento);
-        temporizadorEnquadramento = setTimeout(function() {
-            var dimensoesAtuais = container.getBoundingClientRect();
-            if (!dimensoesAtuais.width || !dimensoesAtuais.height) {
-                return;
-            }
-            enquadramentoDefinido = true;
-            observadorGrafo.disconnect();
-            window.removeEventListener("resize", ajustarEnquadramento);
-            network.fit({animation: false});
-        }, 500);
-    }
-    var observadorGrafo = new ResizeObserver(ajustarEnquadramento);
-    observadorGrafo.observe(container);
-    window.addEventListener("resize", ajustarEnquadramento);
-    ajustarEnquadramento();'''
-    return html.replace(
-        "network = new vis.Network(container, data, options);",
-        "network = new vis.Network(container, data, options);\n" + inicializar_zoom,
-    )

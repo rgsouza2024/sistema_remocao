@@ -29,7 +29,8 @@ Em 25/09/2026, a branch `main` do Space e a branch `main` do GitHub apontavam pa
 - Detecta vagas indicadas como disponíveis nas opções ou permite informar a lista manualmente.
 - Aplica a regra automática de congelamento com base no motivo e na data de início da lotação.
 - Processa movimentações em ciclos, reabrindo a lotação de origem e permitindo que candidatos melhorem uma alocação anterior quando uma opção melhor fica disponível.
-- Exibe o quadro de remoções, vagas remanescentes e logs; a interface também permite baixar uma planilha Excel e um grafo HTML.
+- Exibe o quadro de remoções, vagas remanescentes e logs; a interface também permite baixar uma planilha Excel.
+- Mostra as cadeias de remoção: cada cadeia parte de uma vaga do edital e segue pelas lotações abertas por quem se removeu, até a vaga remanescente. Movimentações que não partem do edital aparecem como permutas. A montagem pressupõe um único magistrado por lotação, o que vale porque titulares e substitutos concorrem em concursos separados.
 
 ## Regras e dados de entrada
 
@@ -121,7 +122,7 @@ curl.exe -X POST "http://127.0.0.1:8000/analisar-remocao" `
   -F "vagas_edital=7ª Vara;8ª Vara"
 ```
 
-A resposta inclui `total_movimentacoes`, `movimentacoes`, `vagas_remanescentes`, `magistrados_congelados`, `alertas_integridade`, `logs` e `data_referencia_utilizada`. A API retorna os dados em JSON; os downloads de Excel e grafo estão disponíveis na interface Streamlit.
+A resposta inclui `total_movimentacoes`, `movimentacoes`, `vagas_remanescentes`, `magistrados_congelados`, `alertas_integridade`, `logs` e `data_referencia_utilizada`. Cada item de `movimentacoes` traz também `Vaga`, a chave normalizada da vaga ocupada. A API retorna os dados em JSON; o download do Excel e as cadeias de remoção estão disponíveis na interface Streamlit.
 
 ### Observações de implantação
 
@@ -143,7 +144,13 @@ O script standalone legado `analise_remocao.py` foi removido. Para executar o si
 
 ## Testes
 
-O repositório não mantém atualmente uma suíte automatizada. Os antigos `test_api.py` e `test_refactor.py` foram removidos porque apenas imprimiam resultados e não validavam as respostas com asserções. A API pode ser verificada manualmente pela documentação em `/docs`.
+Os testes de `tests/` usam `unittest` e cobrem a montagem das cadeias de remoção:
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Os antigos `test_api.py` e `test_refactor.py` foram removidos porque apenas imprimiam resultados e não validavam as respostas com asserções. A API pode ser verificada manualmente pela documentação em `/docs`.
 
 ## Licença
 
