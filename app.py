@@ -2,6 +2,7 @@
 
 import streamlit as st
 import base64
+import io
 import pandas as pd
 from html import escape
 
@@ -77,8 +78,11 @@ st.markdown("""
     .st-key-configuracao [data-testid="stElementContainer"] {
         width: 100%;
     }
+    /* O Streamlit fixa a largura da página via estilo inline nos componentes (botão, campo de texto, opções) */
+    .st-key-configuracao [data-testid="stElementContainer"] > [style*="width"] {
+        width: 100% !important;
+    }
     .st-key-configuracao [data-testid="stButton"] {
-        width: 100% !important; /* o Streamlit fixa a largura da página via estilo inline */
         display: flex;
         justify-content: center;
     }
@@ -142,6 +146,18 @@ st.markdown("""
         color: var(--color-text-muted);
     }
     [data-testid="stDecoration"] { display: none; }
+    /* Dica "Press Ctrl+Enter to apply" do Streamlit (em inglês); a orientação em português fica na legenda */
+    .st-key-configuracao [data-testid="InputInstructions"] { display: none; }
+    [data-testid="stMainBlockContainer"] [data-testid="stMarkdownContainer"] > p.rotulo-campo {
+        font-size: var(--type-label);
+        font-weight: 600;
+        line-height: var(--leading-heading);
+        margin-bottom: var(--space-1);
+    }
+    .st-key-configuracao textarea::placeholder {
+        color: var(--color-text-muted);
+        opacity: 1;
+    }
     .cabecalho {
         display: flex;
         flex-direction: column;
@@ -251,6 +267,22 @@ def renderizar_cadeias(cadeias):
         blocos.append(f'<section class="cadeia"><p class="cadeia-titulo">{titulo}</p><ol>{"".join(itens)}</ol></section>')
     return "".join(blocos)
 
+def ler_texto_colado(texto):
+    """
+    Lê o quadro de inscritos copiado da página do portal (Ctrl+A, Ctrl+C).
+    A tabela começa na linha iniciada por 'Matrícula' com tabulações; só entram as linhas
+    seguintes que também têm tabulações (descarta menu, título e rodapé da página).
+    Retorna None se não encontrar a tabela.
+    """
+    linhas = texto.replace('\r\n', '\n').split('\n')
+    inicio = next((i for i, linha in enumerate(linhas)
+                   if '\t' in linha and remove_acentos(linha.split('\t')[0].strip()) == 'matricula'), None)
+    if inicio is None:
+        return None
+    tabela = [linhas[inicio]] + [linha for linha in linhas[inicio + 1:] if '\t' in linha]
+    df = pd.read_csv(io.StringIO('\n'.join(tabela)), sep='\t', dtype=str, keep_default_na=False)
+    return df.apply(lambda coluna: coluna.str.strip())
+
 # --- CABEÇALHO COM LOGO ---
 with open("logo_trf1.png", "rb") as arquivo_logo:
     logo_base64 = base64.b64encode(arquivo_logo.read()).decode()
@@ -258,22 +290,47 @@ st.markdown(
     f'<header class="cabecalho"><img src="data:image/png;base64,{logo_base64}" '
     'alt="Justiça Federal – Tribunal Regional Federal da 1ª Região">'
     '<h1>Sistema de Análise de Remoção de Magistrados</h1>'
-    '<p class="cabecalho-intro">Envie a relação de inscritos em formato <strong>Word (.docx)</strong>, '
-    '<strong>Excel (.xlsx)</strong> ou <strong>JSON (.json)</strong>.</p></header>',
+    '<p class="cabecalho-intro">Cole o quadro de inscritos copiado do portal do TRF1 ou envie um arquivo '
+    '<strong>Word (.docx)</strong>, <strong>Excel (.xlsx)</strong> ou <strong>JSON (.json)</strong>.</p></header>',
     unsafe_allow_html=True
 )
 
 # Etapa de configuração em coluna estreita e centralizada; resultados usam a largura total
 area_configuracao = st.container(key="configuracao")
-uploaded_file = area_configuracao.file_uploader(
-    "Arquivo de inscritos",
-    type=["docx", "xlsx", "json"],
-    help="Selecione ou arraste um arquivo nos formatos indicados."
+OPCAO_COLAR = "Colar o “Quadro de Magistrados Inscritos para Remoção”"
+modo_entrada = area_configuracao.radio(
+    "Forma de entrada",
+    [OPCAO_COLAR, "Enviar arquivo do “Quadro de Magistrados Inscritos para Remoção”"]
 )
 
-if uploaded_file is not None:
+uploaded_file = None
+texto_colado = ""
+if modo_entrada == OPCAO_COLAR:
+    # Rótulo visível desenhado à parte para a instrução ficar entre ele e o campo
+    area_configuracao.markdown('<p class="rotulo-campo">Quadro de inscritos</p>', unsafe_allow_html=True)
+    area_configuracao.caption("Abra o quadro de inscritos no portal do TRF1, pressione Ctrl+A e Ctrl+C e cole abaixo com Ctrl+V.")
+    texto_colado = area_configuracao.text_area(
+        "Quadro de inscritos",
+        placeholder="Cole aqui a página inteira do quadro (Ctrl+A, Ctrl+C, Ctrl+V). O sistema localiza a tabela sozinho.",
+        height=200,
+        key="texto_colado",
+        label_visibility="collapsed"
+    )
+    area_configuracao.caption("Depois de colar, clique fora do campo ou pressione Ctrl+Enter para o sistema ler o quadro.")
+else:
+    uploaded_file = area_configuracao.file_uploader(
+        "Arquivo de inscritos",
+        type=["docx", "xlsx", "json"],
+        help="Selecione ou arraste um arquivo nos formatos indicados."
+    )
+
+if uploaded_file is not None or texto_colado.strip():
     df_bruto = None
-    if uploaded_file.name.endswith('.docx'):
+    if texto_colado.strip():
+        df_bruto = ler_texto_colado(texto_colado)
+        if df_bruto is None:
+            area_configuracao.error("Não encontrei a tabela no texto colado. Abra o quadro no portal, pressione Ctrl+A e Ctrl+C e cole novamente.")
+    elif uploaded_file.name.endswith('.docx'):
         df_bruto = ler_arquivo_word(uploaded_file)
     elif uploaded_file.name.endswith('.xlsx'):
         df_bruto = ler_arquivo_excel(uploaded_file)
@@ -286,7 +343,11 @@ if uploaded_file is not None:
         texto_padrao = "\n".join(vagas_detectadas) if vagas_detectadas else ""
         
         qtd_vagas = len(vagas_detectadas)
-        area_configuracao.info(f"O sistema detectou {qtd_vagas} {'vaga disputada' if qtd_vagas == 1 else 'vagas disputadas'}.")
+        qtd_inscritos = len(df_bruto)
+        area_configuracao.info(
+            f"{qtd_inscritos} {'inscrito lido' if qtd_inscritos == 1 else 'inscritos lidos'} · "
+            f"{qtd_vagas} {'vaga disputada' if qtd_vagas == 1 else 'vagas disputadas'}."
+        )
 
         # --- ÁREA DE CONFIGURAÇÃO (AUTOMAÇÃO DO CONGELAMENTO) ---
         with area_configuracao.expander("Configurações do edital e regras", expanded=False):

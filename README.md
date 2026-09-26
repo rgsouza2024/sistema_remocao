@@ -25,6 +25,7 @@ O Space é atualizado manualmente a partir da branch `main` do GitHub; não há 
 ## Funcionalidades
 
 - Importa arquivos Word (`.docx`), Excel (`.xlsx`) e JSON (`.json`).
+- Na interface, aceita também o “Quadro de Magistrados Inscritos para Remoção” colado diretamente do portal do TRF1 (Ctrl+A, Ctrl+C, Ctrl+V): o sistema localiza a tabela no texto e descarta menu, título e rodapé da página. A página não traz início nem motivo da lotação, então o congelamento automático fica desativado nessa forma de entrada.
 - Detecta nomes de colunas comuns mesmo com diferenças de maiúsculas e acentos.
 - Detecta vagas indicadas como disponíveis nas opções ou permite informar a lista manualmente.
 - Aplica a regra automática de congelamento com base no motivo e na data de início da lotação.
@@ -145,7 +146,7 @@ O script standalone legado `analise_remocao.py` foi removido. Para executar o si
 
 ## Testes
 
-Os testes de `tests/` usam `unittest` e cobrem a montagem das cadeias de remoção:
+Os testes de `tests/` usam `unittest` e cobrem a montagem das cadeias de remoção e a leitura do quadro colado na interface:
 
 ```powershell
 .venv\Scripts\python.exe -m unittest discover -s tests -v
