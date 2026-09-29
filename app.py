@@ -227,7 +227,7 @@ st.markdown("""
         color: var(--color-text-muted);
     }
     .etapa-sobra .etapa-rotulo { color: var(--color-warning-text); }
-    .etapa-unidade { font-size: var(--type-body); font-weight: 600; }
+    .etapa-unidade { font-size: var(--type-label); font-weight: 600; line-height: var(--leading-heading); }
     .etapa-ocupante { font-size: var(--type-label); }
     </style>
 """, unsafe_allow_html=True)
